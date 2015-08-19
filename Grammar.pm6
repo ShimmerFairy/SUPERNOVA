@@ -189,11 +189,72 @@ grammar Pod6::Grammar {
 
     token reserved_name { [<:Lower>+ | <:Upper>+] <!ww> }
 
-    token configopt { <!> }
-    token extra_config_line { <!> }
+    # unfortunately, even after transferring to CORE, we'll need our own rule to
+    # handle config options, because we can only accept constant keys and
+    # values, but Perl6::Grammar's parser allow non-constants
+    token configopt {
+        :my $*ADV_BINARY := -1;
+        [
+        | \: [\! {$*ADV_BINARY := 0}]?
+          $<ckey>=[<.ident> +% \-]
+          $<cvalue>=[ <?{$*ADV_BINARY != 0}>
+              [
+              | <podassociative>
+              | <podpositional>
+              | \< ~ \> $<podqw>=[ [[<!before \h | <?[>]>> .]+] +%% <.ws> ]
+              | \( ~ \) [[<podstr>|<podint>]||<.non-const-term>]
+              ] || {if $*ADV_BINARY != 0 { $*ADV_BINARY := 1 } }
+                   [ <!before \s> { die "Cannot negate adverb with given value XXX BETTER" } ]?
+          ]
+        | $<ckey>=[<.ident> +% \-]
+          <.ws> "=>" <.ws>
+          $<cvalue>=[
+              [
+              | <podint>
+              | <podstr>
+              | <podpositional>
+              | <podassociative>
+              ] || <.non-const-term>
+                || {die "Nothing found for fatarrow key; please use :$<ckey> if you meant to set a binary flag XXX BETTER"}
+          ]
+        ]
+    }
+
+    # TO-CORE: podint will likely want to parse any <integer>, and podstr any
+    # kind of Q lang (though variable interpolation is disallowed)
+    token podint { \d+ }
+    token podstr {
+        | \' ~ \' [<-['\\]> | \\\\ | \\\']+
+        | \" ~ \" [<-["\\]> | \\\\ | \\\"]+
+    }
+
+    token podpositional {
+        \[ ~ \] [[[<podint>|<podstr>]||<.non-const-term>] +% [<.ws> \, <.ws>]]
+    }
+
+    token podassociative {
+        \{ ~ \} [<configopt> +% [<.ws> \, <.ws>]]
+    }
+
+    # this token lives to produce an error. Do not call unless/until you know
+    # it's needed
+    token non-const-term {
+        | <?before <+[$@%&]> | "::"> (\S\S?! <.ident>) {die "Variable \"$0\" found in pod configuration; only constants are allowed XXX BETTER"}
+        | "#" {die "Unexpected # in pod configuration. (Were you trying to comment out something?) XXX BETTER"}
+        | (<.alnum>+) {die "Unknown term \"$0\" in configuration. Only constants are allowed XXX BETTER"}
+    }
+
+    token extra_config_line {
+        <.start_line> \= \h+
+        <configopt> +%% <.ws>
+        <.end_line>
+    }
 }
 
 # TEMP TEST
 
-say Pod6::Grammar.parse(" =begin pod
- =end pod");
+say Pod6::Grammar.parse(q:to/NOTPOD/);
+    =begin pod :!autotoc
+    =       :autotoc :imconfused :!ok<4>
+    =end pod
+NOTPOD
