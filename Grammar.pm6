@@ -14,9 +14,62 @@ use nqp;
 sub shim-unbox_i(Int $a) { nqp::unbox_i($a) }
 sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
 
-use Grammar::Tracer;
+#use Grammar::Tracer;
 
-grammar Pod6::Grammar {
+role GramError {
+    # basically reimpl of HLL::Compiler.lineof, except because we don't
+    # (currently) save a list of positions, we can just wait until we hit
+    # against a larger position than desired.
+
+    method linecol($text, $at) {
+        my $pos := nqp::list_i();
+        my $tsize := nqp::chars($text);
+        my $realbefore;
+        my $maybefore := 0;
+        my $line := 0;
+
+        # count up the newlines
+
+        while nqp::isle_i($maybefore, $at) {
+            $line := nqp::add_i($line, 1);
+            $realbefore := $maybefore;
+            $maybefore := nqp::findcclass(nqp::const::CCLASS_NEWLINE, $text, $maybefore + 1, $tsize);
+        }
+
+        my $col := nqp::sub_i($at, $realbefore);
+
+        nqp::push_i($pos, $line);
+        nqp::push_i($pos, $col);
+        $pos;
+    }
+
+    # XXX Use ANSIColor
+    # simple parse failure
+    method parse-fail($msg = "No message was given") {
+        $/ = self.MATCH();
+
+        my $string := shim-unbox_s($/.orig);
+
+        my $failat := self.linecol($string, shim-unbox_i($/.from));
+
+        my $fline := nqp::atpos_i($failat, 0);
+        my $fcol  := nqp::sub_i(nqp::atpos_i($failat, 1), 1);
+
+        my $errorline := nqp::atpos(nqp::split("\n", $string), $fline - 1);
+        note "\e[41;1m===SORRY!===\e[0m Error in parsing file:";
+        note $msg;
+        note "In file at line ", $fline, ", col ", $fcol, ":";
+        note "\e[32m", nqp::substr($errorline, 0, $fcol),
+             "\e[33m⏏",
+             "\e[31m", nqp::substr($errorline, $fcol),
+             "\e[0m";
+
+        exit(1);
+    }
+        
+}
+
+grammar Pod6::Grammar does GramError {
     token TOP {
         :my @*VM_MARGINS := nqp::list();
         <.blank_line>*
@@ -62,7 +115,7 @@ grammar Pod6::Grammar {
     }
 
     token end_line {
-        $$ [\n || $ || {die "Line ended surprisngly! XXX BETTER"}]
+        $$ [\n || $ || <.parse-fail("Unknown line ending found.")>]
     }
 
     token blank_line {
@@ -91,7 +144,9 @@ grammar Pod6::Grammar {
 
         # ...
 
-        <.start_line> "=end" <.ws> [$<block_name>||<.block_name> {die "NOT SAME XXX BETTER"}] <.ws> <.end_line>
+        <.start_line> "=end" <.ws> [$<block_name>
+                                   || <badname=block_name> {$<badname>.CURSOR.parse-fail("End block doesn't match start block")}
+                                   ] <.ws> <.end_line>
     }
 
     multi token block_kind:sym<para> {
@@ -116,8 +171,8 @@ grammar Pod6::Grammar {
 
     token block_name {
         || [<standard_name> | <semantic_standard_name>]
-        || <not_name> { die "Cannot use \"$<not_name>\" as block name XXX BETTER" }
-        || <reserved_name> { die "Name \"$<reserved_name>\" is reserved for possible future definition XXX BETTER" }
+        || <not_name> { $/.CURSOR.parse-fail("Cannot use \"$<not_name>\" as block name") }
+        || <reserved_name> { $/.CURSOR.parse-fail("Name \"$<reserved_name>\" is reserved for possible future definition") }
         || $<typename>=(<.alpha> <.alnum>+)
     }
 
@@ -198,7 +253,7 @@ grammar Pod6::Grammar {
               | \< ~ \> $<podqw>=[ [[<!before \h | <?[>]>> .]+] +%% <.ws> ]
               | \( ~ \) [[<podstr>|<podint>]||<.non-const-term>]
               ] || {if $*ADV_BINARY != 0 { $*ADV_BINARY := 1 } }
-                   [ <!before \s> { die "Cannot negate adverb with given value XXX BETTER" } ]?
+                   [ <!before \s> <.parse-fail("Cannot negate adverb with given value")> ]?
           ]
         | $<ckey>=[<.ident> +% \-]
           <.ws> "=>" <.ws>
@@ -209,7 +264,7 @@ grammar Pod6::Grammar {
               | <podpositional>
               | <podassociative>
               ] || <.non-const-term>
-                || {die "Nothing found for fatarrow key; please use :$<ckey> if you meant to set a binary flag XXX BETTER"}
+                || {$/.CURSOR.parse-fail("Nothing found for fatarrow key; please use :$<ckey> if you meant to set a binary flag")}
           ]
         ]
     }
@@ -233,9 +288,9 @@ grammar Pod6::Grammar {
     # this token lives to produce an error. Do not call unless/until you know
     # it's needed
     token non-const-term {
-        | <?before <+[$@%&]> | "::"> (\S\S?! <.ident>) {die "Variable \"$0\" found in pod configuration; only constants are allowed XXX BETTER"}
-        | "#" {die "Unexpected # in pod configuration. (Were you trying to comment out something?) XXX BETTER"}
-        | (<.alnum>+) {die "Unknown term \"$0\" in configuration. Only constants are allowed XXX BETTER"}
+        | <?before <+[$@%&]> | "::"> (\S\S?! <.ident>) {$/.CURSOR.parse-fail("Variable \"$0\" found in pod configuration; only constants are allowed")}
+        | "#" <.parse-fail("Unexpected # in pod configuration. (Were you trying to comment out something?)")>
+        | (<.alnum>+) {$/.CURSOR.parse-fail("Unknown term \"$0\" in configuration. Only constants are allowed.")}
     }
 
     token extra_config_line {
@@ -250,5 +305,5 @@ grammar Pod6::Grammar {
 say Pod6::Grammar.parse(q:to/NOTPOD/);
     =begin pod :!autotoc
     =       :autotoc :imconfused :!ok
-    =end pod
+    =end Sod
 NOTPOD
