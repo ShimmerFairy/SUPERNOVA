@@ -89,7 +89,7 @@ grammar Pod6::Grammar {
     proto token block_kind {*}
 
     multi token block_kind:sym<delim> {
-        "=begin" <.ws>
+        "=begin" <.ws> # XXX want :: here
             <block_name> <.ws>
             <configopt> *%% <.ws> <.end_line>
 
@@ -97,11 +97,11 @@ grammar Pod6::Grammar {
 
         # ...
 
-        <.start_line> "=end" <.ws> $<block_name> <.ws> <.end_line>
+        <.start_line> "=end" <.ws> [$<block_name>||<.block_name> {die "NOT SAME XXX BETTER"}] <.ws> <.end_line>
     }
 
     multi token block_kind:sym<para> {
-        "=for" <.ws>
+        "=for" <.ws> # XXX want :: here
             <block_name> <.ws>
             <configopt> *%% <.ws> <.end_line>
 
@@ -127,10 +127,67 @@ grammar Pod6::Grammar {
         || $<typename>=(<.alpha> <.alnum>+)
     }
 
-    token standard_name { pod }
-    token semantic_standard_name { <!> }
-    token not_name { <!> }
-    token reserved_name { <!> }
+    token standard_name {
+        | code
+        | comment
+        | data
+        | defn
+        | finish
+        | head
+        | input
+        | item
+        | nested
+        | output
+        | para
+        | pod
+        | table
+    }
+
+    token semantic_standard_name {
+        | NAME           | NAMES
+        | AUTHOR         | AUTHORS
+        | VERSION        | VERSIONS
+        | CREATED
+        | EMULATES
+        | EXCLUDES
+        | SYNOPSIS       | SYNOPSES
+        | DESCRIPTION    | DESCRIPTIONS
+        | USAGE          | USAGES
+        | INTERFACE      | INTERFACES
+        | METHOD         | METHODS
+        | SUBROUTINE     | SUBROUTINES
+        | OPTION         | OPTIONS
+        | DIAGNOSTIC     | DIAGNOSTICS
+        | ERROR          | ERRORS
+        | WARNING        | WARNINGS
+        | DEPENDENCY     | DEPENDENCIES
+        | BUG            | BUGS
+        | SEE\-ALSO
+        | ACKNOWLEDGMENT | ACKNOWLEDGEMENTS
+        | COPYRIGHT      | COPYRIGHTS
+        | DISCLAIMER     | DISCLAIMERS
+        | LICENCE        | LICENCES
+        | LICENSE        | LICENSES
+        | TITLE          | TITLES
+        | SECTION        | SECTIONS
+        | CHAPTER        | CHAPTERS
+        | APPENDIX       | APPENDICES
+        | TOC
+        | INDEX          | INDICES
+        | FOREWORD       | FOREWORDS
+        | SUMMARY        | SUMMARIES
+    }
+
+    token not_name {
+        | begin
+        | for
+        | end
+        | config
+        | alias
+        | encoding
+    }
+
+    token reserved_name { [<:Lower>+ | <:Upper>+] <!ww> }
 
     token configopt { <!> }
     token extra_config_line { <!> }
