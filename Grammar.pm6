@@ -34,27 +34,21 @@ grammar Pod6::Grammar {
 
     # XXX apparently we're supposed to emulate tab stops in doing this. Gr.
     method prime_line($margin) {
-#        my @de-tabbed := nqp::split("\t", shim-unbox_s($margin));
-#
-#        if nqp::elems($de-tabbed) == 1 {
-#            nqp::push(@*VM_MARGINS, nqp::chars($margin));
-#        } else {
-#            nqp::push(
-#                @*VM_MARGINS,
-#                nqp::chars(
-#                    nqp::join(
-#                        nqp::x(
-#                            " ",
-#                            ($?TABSTOP // 8)),
-#                        $de-tabbed)));
-#        }
+        my $de-tabbed := nqp::split("\t", shim-unbox_s($margin));
 
-        my @de-tabbed = $margin.split("\t");
-        if +@de-tabbed == 1 {
-            nqp::push(@*VM_MARGINS, $margin.chars);
+        if nqp::elems($de-tabbed) == 1 {
+            nqp::push(@*VM_MARGINS, nqp::chars($margin));
         } else {
-            nqp::push(@*VM_MARGINS, @de-tabbed.join(" " x ($?TABSTOP // 8)).chars);
+            nqp::push(
+                @*VM_MARGINS,
+                nqp::chars(
+                    nqp::join(
+                        nqp::x(
+                            " ",
+                            ($?TABSTOP // 8)),
+                        $de-tabbed)));
         }
+
         self;
     }
 
@@ -255,6 +249,6 @@ grammar Pod6::Grammar {
 
 say Pod6::Grammar.parse(q:to/NOTPOD/);
     =begin pod :!autotoc
-    =       :autotoc :imconfused :!ok<4>
+    =       :autotoc :imconfused :!ok
     =end pod
 NOTPOD
