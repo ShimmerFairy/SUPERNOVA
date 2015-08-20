@@ -19,7 +19,7 @@ sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
 role GramError {
     # basically reimpl of HLL::Compiler.lineof, except because we don't
     # (currently) save a list of positions, we can just wait until we hit
-    # against a larger position than desired.
+    # against a larger position than desired. Also, gives back the column too :)
 
     method linecol($text, $at) {
         my $pos := nqp::list_i();
@@ -72,6 +72,9 @@ role GramError {
 grammar Pod6::Grammar does GramError {
     token TOP {
         :my @*VM_MARGINS := nqp::list();
+        :my $*CAN_CODE;
+        :my $*CAN_PARA;
+
         <.blank_line>*
         [<block>
          <.blank_line>*]+
@@ -125,7 +128,7 @@ grammar Pod6::Grammar does GramError {
     # high-level block handling
 
     token block {
-        ^^ $<litmargin>=(\h*) <?before \= <-[=]> >
+        ^^ $<litmargin>=(\h*) <?before <new_directive>>
         {self.prime_line(~$<litmargin>)}
 
         <block_kind>
@@ -142,7 +145,12 @@ grammar Pod6::Grammar does GramError {
 
         <extra_config_line>*
 
-        # ...
+        [ <!before \h* "=end">
+          [
+          | <block>
+          | <.start_line> <pseudopara> <.blank_line>?
+          ]
+        ]*
 
         <.start_line> "=end" <.ws> [$<block_name>
                                    || <badname=block_name> {$<badname>.CURSOR.parse-fail("End block doesn't match start block")}
@@ -156,7 +164,7 @@ grammar Pod6::Grammar does GramError {
 
         <extra_config_line>*
 
-        #...
+        <.start_line> <pseudopara>
 
         <.blank_line>
     }
@@ -164,7 +172,14 @@ grammar Pod6::Grammar does GramError {
     multi token block_kind:sym<abbr> {
         \= <block_name> <.ws>
 
-        #...
+        # Implicit code blocks only work if started on the next line, the other
+        # possibilities can start on the same line.
+
+        [
+        | <.end_line> <.start_line> <pseudopara>
+        # XXX hackish way to disallow code blocks
+        | :my $*CAN_CODE := 0; <pseudopara>
+        ]
 
         <.blank_line>
     }
@@ -177,22 +192,23 @@ grammar Pod6::Grammar does GramError {
     }
 
     token standard_name {
-        | code
+        | code                        { $*CAN_CODE := 1 }
         | comment
         | data
-        | defn
-        | finish
+        | defn    { $*CAN_PARA := 1 }
+        | finish  { $*CAN_PARA := 1 }
         | head
         | input
-        | item
-        | nested
+        | item    { $*CAN_PARA := 1 } { $*CAN_CODE := 1 }
+        | nested  { $*CAN_PARA := 1 } { $*CAN_CODE := 1 }
         | output
         | para
-        | pod
+        | pod     { $*CAN_PARA := 1 } { $*CAN_CODE := 1 }
         | table
     }
 
     token semantic_standard_name {
+        [
         | NAME           | NAMES
         | AUTHOR         | AUTHORS
         | VERSION        | VERSIONS
@@ -225,6 +241,7 @@ grammar Pod6::Grammar does GramError {
         | INDEX          | INDICES
         | FOREWORD       | FOREWORDS
         | SUMMARY        | SUMMARIES
+        ] { $*CAN_PARA := 1; $*CAN_CODE := 1 }
     }
 
     token not_name {
@@ -264,7 +281,7 @@ grammar Pod6::Grammar does GramError {
               | <podpositional>
               | <podassociative>
               ] || <.non-const-term>
-                || {$/.CURSOR.parse-fail("Nothing found for fatarrow key; please use :$<ckey> if you meant to set a binary flag")}
+                || {$/.CURSOR.parse-fail("No value found for fatarrow key; please use :$<ckey> if you meant to set a binary flag")}
           ]
         ]
     }
@@ -298,6 +315,40 @@ grammar Pod6::Grammar does GramError {
         <configopt> +%% <.ws>
         <.end_line>
     }
+
+
+    proto token pseudopara {*}
+    multi token pseudopara:sym<implicit_code> {
+        <?{$*CAN_CODE}> # probably want ::
+        # TOCORE *-1 -> -1
+        (\h+) {self.prime_line(~$0); nqp::push(@*VM_MARGINS, nqp::add_i(nqp::pop(@*VM_MARGINS), @*VM_MARGINS[*-1]))}
+
+        <( <!before <new_directive>> \N+ <.end_line>
+        [<!blank_line> <.start_line> <!before <new_directive>> \N+ <.end_line>]*
+
+        )> <.unprime_line>
+    }
+
+    multi token pseudopara:sym<implicit_para> {
+        <?{$*CAN_PARA}> # probably want ::
+
+        # we can accept indented stuff, _if_ code blocks can't be implicit here
+        [<!{$*CAN_CODE}> \h*]?
+
+        <!before <new_directive>> \N+ <.end_line>
+        [<!blank_line> <.start_line> <!before <new_directive>> \N+ <.end_line>]*
+    }
+
+    multi token pseudopara:sym<nothing_implied> {
+        <!{$*CAN_PARA}> <!{$*CAN_CODE}> # probably not needed when :: used on the other multis
+        <!before <new_directive>> \N+ <.end_line>
+        [<!blank_line> <.start_line> <!before <new_directive>> \N+ <.end_line>]*
+    }
+
+    # meant as a lookahead for when we need to know if a new block would be starting at the current position
+    token new_directive {
+        \h* \= [[[begin|for|end] \h+]? [<standard_name>|<semantic_standard_name>] | alias | config | encoding]
+    }
 }
 
 # TEMP TEST
@@ -305,5 +356,16 @@ grammar Pod6::Grammar does GramError {
 say Pod6::Grammar.parse(q:to/NOTPOD/);
     =begin pod :!autotoc
     =       :autotoc :imconfused :!ok
-    =end Sod
+    Hello there
+    Everybody
+
+    Another para
+
+        AND SOME CODE
+            GLORIOUS CODE
+        HELLO SAILOR
+
+    And one more para
+        Hanging indent!!~~
+    =end pod
 NOTPOD
