@@ -16,7 +16,7 @@ class X::FLC {
 
 
 # TO-CORE use the real group type instead
-class X::Epitaph {
+class X::Epitaph is Exception {
     has $.panic;
     has @.sorrows;
     has @.worries;
@@ -90,11 +90,13 @@ class X::Pod6 is Exception {
         $gist ~= "{$red}{$.badpart.chomp}$reset";
 
         with $.hint-message {
-            $gist ~= "\n\n$.hint-message:\n";
-            $gist ~= "at $!hint-flc.getloc()\n";
-            $gist ~= "------>|$green$.hint-beforepoint";
-            $gist ~= "$yellow$hintat";
-            $gist ~= "{$green}{$.hint-afterpoint.chomp}$reset";
+            my $hint;
+            $hint ~= "\n\n$.hint-message:\n";
+            $hint ~= "at $!hint-flc.getloc()\n";
+            $hint ~= "------>|$green$.hint-beforepoint";
+            $hint ~= "$yellow$hintat";
+            $hint ~= "{$green}{$.hint-afterpoint.chomp}$reset";
+            $gist ~= $hint.indent(4);
         }
 
         $gist;

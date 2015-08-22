@@ -158,18 +158,35 @@ role GramError {
         $type.new(|%opts);
     }
 
+    # stuff that's potentially troublesome, but doesn't prevent a useful result
+    # from the parser
     method worry(Exception $type, *%exnameds) {
         @*WORRIES.push(self.make-ex(self.MATCH, $type, %exnameds));
+        self;
     }
 
+    # stuff that leaves the parser unable to return something useful, but
+    # doesn't prevent the parser from continuing (in order to find more
+    # sorrows/panics)
     method sorry(Exception $type, *%exnameds) {
         @*SORROWS.push(self.make-ex(self.MATCH, $type, %exnameds));
+
+        if +@*SORROWS >= $*SORRY_LIMIT { # we've got too much to be sorry for, bail
+            self.give-up-ghost();
+        }
+        self;
     }
 
-    # curse of fatal death
+    # curse of fatal death --- there's no way the parser can even parse more
+    # stuff after something like this
     method panic(Exception $type, *%exnameds) {
         my $ex := self.make-ex(self.MATCH, $type, %exnameds);
-        $ex.throw;
+        if +@*SORROWS || +@*WORRIES {
+            self.give-up-ghost($ex);
+        } else {
+            $ex.throw;
+        }
+        self;
     }
 
     method cry-sorrows() {
@@ -214,6 +231,7 @@ grammar Pod6::Grammar does GramError {
         :my $*CAN_PARA;
         :my @*WORRIES;
         :my @*SORROWS;
+        :my $*SORRY_LIMIT := 10;
 
         <.blank_line>*
         [<block>
@@ -411,16 +429,15 @@ grammar Pod6::Grammar does GramError {
         [
         | \: [\! {$*ADV_BINARY := 0}]?
           [$<ckey>=[<.ident> +% \-] || <.non-const-term>]
-          $<cvalue>=[ <?{$*ADV_BINARY != 0}>
-              [
+          $<cvalue>=[
+            | [
               | <podassociative>
               | <podpositional>
               | \< ~ \> $<podqw>=[ [[<!before \h | <?[>]>> .]+] +%% <.ws> ]
               | \( ~ \) [[<podstr>|<podint>]||<.non-const-term>]
-              ] || <?{$*ADV_BINARY == 0}>
-                   [ <!before \s> $<badneg>=[\S+] {$<badneg>.CURSOR.panic(X::Pod6::BadConfig, message => "Cannot negate adverb and provide its value")} ]?
-                || {$*ADV_BINARY := 1}
-                   [ <!before \s> $<badtext>=[[\S & <-[,]>]+] {$<badtext>.CURSOR.panic(X::Pod6::BadConfig, message => "Unknown text \"$0\" after key")} ]?
+              ] [ <?{$*ADV_BINARY == 0}> {$¢.panic(X::Pod6::BadConfig, message => "Cannot negate adverb and provide value ~$<cvalue>")} ]
+            | {unless $*ADV_BINARY == 0 { $*ADV_BINARY := 1} }
+              [ <!before \s> $<badtext>=[[\S & <-[,]>]+] {$<badtext>.CURSOR.panic(X::Pod6::BadConfig, message => "Unknown text \"$0\" after key")} ]?
           ]
         | [$<ckey>=[<.ident> +% \-] || <.non-const-term>]
           <.ws> ["=>" || {$¢.panic(X::Pod6::BadConfig, message => "Bad key; expecting => after key or : before it")}]
