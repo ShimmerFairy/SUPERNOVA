@@ -229,6 +229,9 @@ grammar Pod6::Grammar does GramError {
         :my @*VM_MARGINS := nqp::list();
         :my $*CAN_CODE;
         :my $*CAN_PARA;
+        :my $*FC_BLANKSTOP;
+
+        # TO-CORE stuff we won't need
         :my @*WORRIES;
         :my @*SORROWS;
         :my $*SORRY_LIMIT := 10;
@@ -306,6 +309,8 @@ grammar Pod6::Grammar does GramError {
 
         <extra_config_line>*
 
+        {$*FC_BLANKSTOP := 0}
+
         [ <!before \h* "=end">
           [
           | <block>
@@ -325,6 +330,8 @@ grammar Pod6::Grammar does GramError {
 
         <extra_config_line>*
 
+        {$*FC_BLANKSTOP := 1}
+
         <.start_line> <pseudopara>
 
         <.blank_line>
@@ -335,6 +342,8 @@ grammar Pod6::Grammar does GramError {
 
         # Implicit code blocks only work if started on the next line, the other
         # possibilities can start on the same line.
+
+        {$*FC_BLANKSTOP := 1}
 
         [
         | <.end_line> <.start_line> <pseudopara>
@@ -491,10 +500,12 @@ grammar Pod6::Grammar does GramError {
         # TOCORE *-1 -> -1
         (\h+) {self.prime_line(~$0); nqp::push(@*VM_MARGINS, nqp::add_i(nqp::pop(@*VM_MARGINS), @*VM_MARGINS[*-1]))}
 
-        <( <!before <new_directive>> \N+ <.end_line>
-        [<!blank_line> <.start_line> <!before <new_directive>> \N+ <.end_line>]*
+        :my $*FC_BLANKSTOP := 1; # implied code block overrides existing FC setting
 
-        )> <.unprime_line>
+        <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
+        [<!blank_line> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
+
+        <.unprime_line>
     }
 
     multi token pseudopara:sym<implicit_para> {
@@ -503,14 +514,51 @@ grammar Pod6::Grammar does GramError {
         # we can accept indented stuff, _if_ code blocks can't be implicit here
         [<!{$*CAN_CODE}> \h*]?
 
-        <!before <new_directive>> \N+ <.end_line>
-        [<!blank_line> <.start_line> <!before <new_directive>> \N+ <.end_line>]*
+        :my $*FC_BLANKSTOP := 1; # implied para overrides existing FC setting
+
+        <!before <new_directive>> <one_token_text>+ <.end_line>
+        [<!blank_line> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
     }
 
     multi token pseudopara:sym<nothing_implied> {
         <!{$*CAN_PARA}> <!{$*CAN_CODE}> # probably not needed when :: used on the other multis
-        <!before <new_directive>> \N+ <.end_line>
-        [<!blank_line> <.start_line> <!before <new_directive>> \N+ <.end_line>]*
+        <!before <new_directive>> <one_token_text>+ <.end_line>
+        [<!blank_line> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
+    }
+
+    token one_token_text {
+        \N | <format_code>
+    }
+
+    token format_code {
+        :my $endcond;
+        :my $opener;
+        :my $closeleft := shim-unbox_i(1);
+        $<which>=[ <[A..Z]> ]
+        [
+        | $<restart>=(\<+) {$opener := "<"; $endcond := ">" x (~$<restart>).chars}
+        | $<restart>=(\«+) {$opener := "«"; $endcond := "»" x (~$<restart>).chars}
+        ]
+
+        [ <?{$closeleft > 0}>
+          [
+          | $<restart>
+            [
+            | $opener+ { $¢.panic(X::Pod6::FCode::TooManyAngles) }
+            | { $closeleft := nqp::add_i($closeleft, 1) }
+            ]
+          | <format_code>
+          | $endcond { $closeleft := nqp::sub_i($closeleft, 1) }
+          | <.end_line>
+            [
+            | [ <.new_directive> | <?{$*FC_BLANKSTOP}> <?blank_line> ]
+              <.worry(X::Pod6::FCode::ForcedStop)>
+              {$closeleft := 0}
+            | <.start_line> .
+            ]
+          | <!before $endcond> \N
+          ]
+        ]+
     }
 
     # meant as a lookahead for when we need to know if a new block would be starting at the current position
@@ -524,15 +572,15 @@ grammar Pod6::Grammar does GramError {
 my $*FILENAME = "<internal-test>";
 
 my $testpod = q:to/NOTPOD/;
-    =begin piod :!autotoc
-    =       :autotoc :imconfused, :!ok
-    Hello there
+    =begin pod :!autotoc
+    =       :autotoc :imconfused :!ok
+    Hello there L<ALL OK >
     Everybody
 
     Another para
 
-        AND SOME CODE
-            GLORIOUS CODE
+        AND SOME CODE C««
+            GLORIOUS»» CODE
         HELLO SAILOR
 
     And one more para
@@ -541,3 +589,6 @@ my $testpod = q:to/NOTPOD/;
 NOTPOD
 
 Pod6::Grammar.parse($testpod);
+for @<block>[0]<block_kind><pseudopara>[2]<line> {
+    say ~$_
+}

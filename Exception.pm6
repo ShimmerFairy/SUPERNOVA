@@ -91,7 +91,7 @@ class X::Pod6 is Exception {
 
         with $.hint-message {
             my $hint;
-            $hint ~= "\n\n$.hint-message:\n";
+            $hint ~= "\n\n$.hint-message\n";
             $hint ~= "at $!hint-flc.getloc()\n";
             $hint ~= "------>|$green$.hint-beforepoint";
             $hint ~= "$yellow$hintat";
@@ -138,5 +138,17 @@ class X::Pod6::Block::ReservedName is X::Pod6 {
     method message() {
         "Cannot use \"$.culprit\" as block name, as it is reserved for future use " ~
         "(please vary the case if you want a custom block name, e.g. \"{$.culprit.tclc}\")"
+    }
+}
+
+class X::Pod6::FCode::TooManyAngles is X::Pod6 {
+    method message() {
+        "Too many opening angle brackets in formatting code."
+    }
+}
+
+class X::Pod6::FCode::ForcedStop is X::Pod6 {
+    method message() {
+        "Formatting code forced to stop before ending angle bracket."
     }
 }
