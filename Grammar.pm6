@@ -14,33 +14,92 @@ use nqp;
 sub shim-unbox_i(Int $a) { nqp::unbox_i($a) }
 sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
 
+sub shim-box_i(int $a) { nqp::box_i($a, Int) }
+
 #use Grammar::Tracer;
 
-role GramError {
-    # basically reimpl of HLL::Compiler.lineof, except because we don't
-    # (currently) save a list of positions, we can just wait until we hit
-    # against a larger position than desired. Also, gives back the column too :)
+use Exception;
 
+role GramError {
+    has $!nl-list;
+
+    # like HLL::Compiler.lineof, but gives a column too
     method linecol($text, $at) {
-        my $pos := nqp::list_i();
         my $tsize := nqp::chars($text);
-        my $realbefore;
-        my $maybefore := 0;
+        my $lookfrom := 0;
         my $line := 0;
 
-        # count up the newlines
+        my $pos := nqp::list_i();
 
-        while nqp::isle_i($maybefore, $at) {
-            $line := nqp::add_i($line, 1);
-            $realbefore := $maybefore;
-            $maybefore := nqp::findcclass(nqp::const::CCLASS_NEWLINE, $text, $maybefore + 1, $tsize);
+        unless $!nl-list {
+            $!nl-list := nqp::list_i();
+
+            my sub nextnl {
+                nqp::findcclass(nqp::const::CCLASS_NEWLINE, $text, $lookfrom, $tsize);
+            }
+
+            while nqp::islt_i(($lookfrom := nextnl()), $tsize) {
+                # don't count \r\n as two newlines
+                if nqp::eqat($text, "\r\n", $lookfrom) {
+                    $lookfrom := nqp::add_i($lookfrom, 2);
+                } else {
+                    $lookfrom := nqp::add_i($lookfrom, 1);
+                }
+
+                # unlike HLL::Compiler's lineof, we count \r\n as ending after
+                # the \n. This opens up the chance that we'll get a pointer in
+                # the middle (\r⏏\n) identifying itself on the line \r\n ends
+                # (whereas lineof would report for the next line), but it's
+                # generally not a good idea to wind up there anyway ☺
+                nqp::push_i($!nl-list, $lookfrom);
+            }
         }
 
-        my $col := nqp::sub_i($at, $realbefore);
+        # now to find the right line number
 
-        nqp::push_i($pos, $line);
-        nqp::push_i($pos, $col);
+        my $lo := 0;
+        my $hi := nqp::elems($!nl-list);
+        my $linefind;
+
+        while nqp::islt_i($lo, $hi) {
+            $linefind := nqp::div_i(nqp::add_i($lo, $hi), 2);
+            if nqp::isgt_i(nqp::atpos_i($!nl-list, $linefind), $at) {
+                $hi := $linefind;
+            } else {
+                $lo := nqp::add_i($linefind, 1);
+            }
+        }
+
+        nqp::bindpos_i($pos, 0, nqp::add_i($lo, 1));
+
+        # now to get the column
+        if $lo == 0 {
+            nqp::bindpos_i($pos, 1, $at);
+        } else {
+            nqp::bindpos_i($pos, 1, nqp::sub_i($at, nqp::atpos_i($!nl-list, nqp::sub_i($lo, 1))));
+        }
+
         $pos;
+    }
+
+    method takeline(str $fromthis, int $lineno) {
+        my $arrline := nqp::sub_i($lineno, 1);
+
+        my $startpos;
+        my $endpos;
+        if $arrline == 0 {
+            $startpos := 0;
+        } else {
+            $startpos := nqp::atpos_i($!nl-list, nqp::sub_i($arrline, 1));
+        }
+
+        if $arrline == nqp::elems($!nl-list) {
+            $endpos := nqp::chars($fromthis);
+        } else {
+            $endpos := nqp::atpos_i($!nl-list, $arrline);
+        }
+
+        nqp::substr($fromthis, $startpos, nqp::sub_i($endpos, $startpos));
     }
 
     # XXX Use ANSIColor
@@ -53,7 +112,7 @@ role GramError {
         my $failat := self.linecol($string, shim-unbox_i($/.from));
 
         my $fline := nqp::atpos_i($failat, 0);
-        my $fcol  := nqp::sub_i(nqp::atpos_i($failat, 1), 1);
+        my $fcol  := nqp::atpos_i($failat, 1);
 
         my $errorline := nqp::atpos(nqp::split("\n", $string), $fline - 1);
         note "\e[41;1m===SORRY!===\e[0m Error in parsing file:";
@@ -66,7 +125,86 @@ role GramError {
 
         exit(1);
     }
-        
+
+    method make-ex($/, Exception $type, %opts is copy) {
+        my $linecol := self.linecol(shim-unbox_s($/.orig), shim-unbox_i($/.from));
+
+        my $fled-line := self.takeline(shim-unbox_s($/.orig), nqp::atpos_i($linecol, 0));
+
+        %opts<goodpart> := nqp::substr($fled-line, 0, nqp::atpos_i($linecol, 1));
+        %opts<badpart>  := nqp::substr($fled-line, nqp::atpos_i($linecol, 1));
+
+        %opts<err-flc> := X::FLC.new(file => $*FILENAME,
+                                         line => shim-box_i(nqp::atpos_i($linecol, 0)),
+                                         col  => shim-box_i(nqp::atpos_i($linecol, 1)));
+
+        if %opts<HINT-MATCH>:exists {
+            my $hint := %opts<HINT-MATCH>;
+
+            my $hintlc := self.linecol(shim-unbox_s($hint.orig), shim-unbox_i($hint.from));
+
+            my $hint-line := self.takeline(shim-unbox_s($hint.orig), nqp::atpos_i($hintlc, 0));
+
+            %opts<hint-beforepoint> := nqp::substr($hint-line, 0, nqp::atpos_i($hintlc, 1));
+            %opts<hint-afterpoint>  := nqp::substr($hint-line, nqp::atpos_i($hintlc, 1));
+
+            %opts<hint-flc> := X::FLC.new(file => $*FILENAME,
+                                              line => shim-box_i(nqp::atpos_i($hintlc, 0)),
+                                              col  => shim-box_i(nqp::atpos_i($hintlc, 1)));
+
+            %opts<HINT-MATCH>:delete;
+        }
+
+        $type.new(|%opts);
+    }
+
+    method worry(Exception $type, *%exnameds) {
+        @*WORRIES.push(self.make-ex(self.MATCH, $type, %exnameds));
+    }
+
+    method sorry(Exception $type, *%exnameds) {
+        @*SORROWS.push(self.make-ex(self.MATCH, $type, %exnameds));
+    }
+
+    # curse of fatal death
+    method panic(Exception $type, *%exnameds) {
+        my $ex := self.make-ex(self.MATCH, $type, %exnameds);
+        $ex.throw;
+    }
+
+    method cry-sorrows() {
+        if +@*SORROWS == 1 && !+@*WORRIES {
+            @*SORROWS[0].throw;
+        } elsif @*SORROWS > 1 {
+            self.give-up-ghost();
+        }
+        self;
+    }
+
+    method express-worries() {
+        return self unless +@*WORRIES;
+        if +@*SORROWS {
+            warn "Issue in Grammar Error Reporter: worries being expressed before sorrows cried";
+        }
+
+        self.give-up-ghost();
+        self;
+    }
+
+    method give-up-ghost(X::Pod6 $panic?) {
+        my $ghost;
+        with $panic {
+            $ghost = X::Epitaph.new(:$panic, worries => @*WORRIES, sorrows => @*SORROWS);
+        } else {
+            $ghost = X::Epitaph.new(worries => @*WORRIES, sorrows => @*SORROWS);
+        }
+
+        if +@*SORROWS {
+            $ghost.throw
+        } else {
+            print($ghost.gist)
+        }
+    }
 }
 
 grammar Pod6::Grammar does GramError {
@@ -74,10 +212,15 @@ grammar Pod6::Grammar does GramError {
         :my @*VM_MARGINS := nqp::list();
         :my $*CAN_CODE;
         :my $*CAN_PARA;
+        :my @*WORRIES;
+        :my @*SORROWS;
 
         <.blank_line>*
         [<block>
          <.blank_line>*]+
+
+        <.cry-sorrows>
+        <.express-worries>
     }
 
     # XXX if this grammar is not kept independent in the move to core, this rule
@@ -153,7 +296,7 @@ grammar Pod6::Grammar does GramError {
         ]*
 
         <.start_line> "=end" <.ws> [$<block_name>
-                                   || <badname=block_name> {$<badname>.CURSOR.parse-fail("End block doesn't match start block")}
+                                   || <badname=.block_name> {$<badname>.CURSOR.panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
                                    ] <.ws> <.end_line>
     }
 
@@ -186,9 +329,9 @@ grammar Pod6::Grammar does GramError {
 
     token block_name {
         || [<standard_name> | <semantic_standard_name>]
-        || <not_name> { $/.CURSOR.parse-fail("Cannot use \"$<not_name>\" as block name") }
-        || <reserved_name> { $/.CURSOR.parse-fail("Name \"$<reserved_name>\" is reserved for possible future definition") }
-        || $<typename>=(<.alpha> <.alnum>+)
+        || <not_name> { $¢.sorry(X::Pod6::Block::DirectiveAsName, culprit => ~$<not_name>) }
+        || <reserved_name> { $¢.sorry(X::Pod6::Block::ReservedName, culprit => ~$<reserved_name>) }
+        || <typename>
     }
 
     token standard_name {
@@ -255,6 +398,11 @@ grammar Pod6::Grammar does GramError {
 
     token reserved_name { [<:Lower>+ | <:Upper>+] <!ww> }
 
+    token typename {
+        | <:Upper>+ <:Lower> [<:Upper>|<:Lower>]*
+        | <:Lower>+ <:Upper> [<:Lower>|<:Upper>]*
+    }
+
     # unfortunately, even after transferring to CORE, we'll need our own rule to
     # handle config options, because we can only accept constant keys and
     # values, but Perl6::Grammar's parser allow non-constants
@@ -262,18 +410,21 @@ grammar Pod6::Grammar does GramError {
         :my $*ADV_BINARY := -1;
         [
         | \: [\! {$*ADV_BINARY := 0}]?
-          $<ckey>=[<.ident> +% \-]
+          [$<ckey>=[<.ident> +% \-] || <.non-const-term>]
           $<cvalue>=[ <?{$*ADV_BINARY != 0}>
               [
               | <podassociative>
               | <podpositional>
               | \< ~ \> $<podqw>=[ [[<!before \h | <?[>]>> .]+] +%% <.ws> ]
               | \( ~ \) [[<podstr>|<podint>]||<.non-const-term>]
-              ] || {if $*ADV_BINARY != 0 { $*ADV_BINARY := 1 } }
-                   [ <!before \s> <.parse-fail("Cannot negate adverb with given value")> ]?
+              ] || <?{$*ADV_BINARY == 0}>
+                   [ <!before \s> $<badneg>=[\S+] {$<badneg>.CURSOR.panic(X::Pod6::BadConfig, message => "Cannot negate adverb and provide its value")} ]?
+                || {$*ADV_BINARY := 1}
+                   [ <!before \s> $<badtext>=[[\S & <-[,]>]+] {$<badtext>.CURSOR.panic(X::Pod6::BadConfig, message => "Unknown text \"$0\" after key")} ]?
           ]
-        | $<ckey>=[<.ident> +% \-]
-          <.ws> "=>" <.ws>
+        | [$<ckey>=[<.ident> +% \-] || <.non-const-term>]
+          <.ws> ["=>" || {$¢.panic(X::Pod6::BadConfig, message => "Bad key; expecting => after key or : before it")}]
+          <.ws>
           $<cvalue>=[
               [
               | <podint>
@@ -281,7 +432,7 @@ grammar Pod6::Grammar does GramError {
               | <podpositional>
               | <podassociative>
               ] || <.non-const-term>
-                || {$/.CURSOR.parse-fail("No value found for fatarrow key; please use :$<ckey> if you meant to set a binary flag")}
+                || {$¢.panic(X::Pod6::BadConfig, message => "No value found after fatarrow; please use :$<ckey> if you meant to set a binary flag")}
           ]
         ]
     }
@@ -305,14 +456,14 @@ grammar Pod6::Grammar does GramError {
     # this token lives to produce an error. Do not call unless/until you know
     # it's needed
     token non-const-term {
-        | <?before <+[$@%&]> | "::"> (\S\S?! <.ident>) {$/.CURSOR.parse-fail("Variable \"$0\" found in pod configuration; only constants are allowed")}
-        | "#" <.parse-fail("Unexpected # in pod configuration. (Were you trying to comment out something?)")>
-        | (<.alnum>+) {$/.CURSOR.parse-fail("Unknown term \"$0\" in configuration. Only constants are allowed.")}
+        | <?before <+[$@%&]> | "::"> (\S\S?! <.ident>) {$¢.panic(X::Pod6::BadConfig, message => "Variable \"$0\" found in pod configuration; only constants are allowed")}
+        | "#" <.panic(X::Pod6::BadConfig, message => "Unexpected # in pod configuration. (Were you trying to comment out something?)")>
+        | ([\S & <-[\])>]>]+) {$¢.panic(X::Pod6::BadConfig, message => "Unknown term \"$0\" in configuration. Only constants are allowed.")}
     }
 
     token extra_config_line {
         <.start_line> \= \h+
-        <configopt> +%% <.ws>
+        <configopt> +%% [<.ws> [$<badcomma>=[\,] <.ws> {$<badcomma>[*-1].CURSOR.worry(X::Pod6::BadConfig::Comma)}]?]
         <.end_line>
     }
 
@@ -347,15 +498,17 @@ grammar Pod6::Grammar does GramError {
 
     # meant as a lookahead for when we need to know if a new block would be starting at the current position
     token new_directive {
-        \h* \= [[[begin|for|end] \h+]? [<standard_name>|<semantic_standard_name>] | alias | config | encoding]
+        \h* \= [[[begin|for|end] \h+]? [<reserved_name> | <typename>]]
     }
 }
 
 # TEMP TEST
 
-say Pod6::Grammar.parse(q:to/NOTPOD/);
-    =begin pod :!autotoc
-    =       :autotoc :imconfused :!ok
+my $*FILENAME = "<internal-test>";
+
+my $testpod = q:to/NOTPOD/;
+    =begin piod :!autotoc
+    =       :autotoc :imconfused, :!ok
     Hello there
     Everybody
 
@@ -369,3 +522,5 @@ say Pod6::Grammar.parse(q:to/NOTPOD/);
         Hanging indent!!~~
     =end pod
 NOTPOD
+
+Pod6::Grammar.parse($testpod);
