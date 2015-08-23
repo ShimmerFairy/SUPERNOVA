@@ -283,7 +283,7 @@ class FCAllow {
 
 grammar Pod6::Grammar does GramError {
     token TOP {
-        :my @*VM_MARGINS := nqp::list();
+        :my @*V_MARGINS := nqp::list();
         :my $*CAN_CODE;
         :my $*CAN_PARA;
         :my $*FC_BLANKSTOP;
@@ -315,10 +315,10 @@ grammar Pod6::Grammar does GramError {
         my $de-tabbed := nqp::split("\t", shim-unbox_s($margin));
 
         if nqp::elems($de-tabbed) == 1 {
-            nqp::push(@*VM_MARGINS, nqp::chars($margin));
+            nqp::push(@*V_MARGINS, nqp::chars($margin));
         } else {
             nqp::push(
-                @*VM_MARGINS,
+                @*V_MARGINS,
                 nqp::chars(
                     nqp::join(
                         nqp::x(
@@ -331,12 +331,12 @@ grammar Pod6::Grammar does GramError {
     }
 
     method unprime_line {
-        nqp::pop(@*VM_MARGINS);
+        nqp::pop(@*V_MARGINS);
         self;
     }
 
     token start_line {
-        ^^    " " ** {@*VM_MARGINS[*-1]}
+        ^^    " " ** {@*V_MARGINS[*-1]}
     }
 
     token end_line {
@@ -374,14 +374,14 @@ grammar Pod6::Grammar does GramError {
         ^^ $<litmargin>=(\h*) <?before <new_directive>>
         {self.prime_line(~$<litmargin>)}
 
-        <block_kind>
+        <directive>
 
         <.unprime_line> <.fc-pop>
     }
 
-    proto token block_kind {*}
+    proto token directive {*}
 
-    multi token block_kind:sym<delim> {
+    multi token directive:sym<delim> {
         "=begin" <.ws> # XXX want :: here
             <block_name> <.ws>
             <configopt> *%% <.ws> <.end_line>
@@ -402,7 +402,7 @@ grammar Pod6::Grammar does GramError {
                                    ] <.ws> <.end_line>
     }
 
-    multi token block_kind:sym<para> {
+    multi token directive:sym<para> {
         "=for" <.ws> # XXX want :: here
             <block_name> <.ws>
             <configopt> *%% <.ws> <.end_line>
@@ -416,7 +416,7 @@ grammar Pod6::Grammar does GramError {
         <.blank_line>
     }
 
-    multi token block_kind:sym<abbr> {
+    multi token directive:sym<abbr> {
         \= <block_name> <.ws>
 
         # Implicit code blocks only work if started on the next line, the other
@@ -579,7 +579,7 @@ grammar Pod6::Grammar does GramError {
     multi token pseudopara:sym<implicit_code> {
         <?{$*CAN_CODE}> # probably want ::
         # TOCORE *-1 -> -1
-        (\h+) {self.prime_line(~$0); nqp::push(@*VM_MARGINS, nqp::add_i(nqp::pop(@*VM_MARGINS), @*VM_MARGINS[*-1]))}
+        (\h+) {self.prime_line(~$0); nqp::push(@*V_MARGINS, nqp::add_i(nqp::pop(@*V_MARGINS), @*V_MARGINS[*-1]))}
 
         :my $*FC_BLANKSTOP := 1;  # implied code block overrides existing FC setting
         <.now-revoke-all>         # don't allow formatting codes by default
@@ -672,11 +672,11 @@ NOTPOD
 
 Pod6::Grammar.parse($testpod);
 
-for @<block>[0]<block_kind><pseudopara>[0]<one_token_text> {
+for @<block>[0]<directive><pseudopara>[0]<one_token_text> {
     say ~$_;
 }
 
-for @<block>[0]<block_kind><pseudopara>[2]<line>[0..*-1] {
+for @<block>[0]<directive><pseudopara>[2]<line>[0..*-1] {
     for $_<one_token_text> {
         say ~$_
     }
