@@ -224,12 +224,70 @@ role GramError {
     }
 }
 
+# TO-CORE not sure if having this class would be good in core
+class FCAllow {
+    # TO-CORE should be %
+    has $!status;
+
+    submethod BUILD {
+        $!status := nqp::hash();
+    }
+
+    method !populate(int $val) {
+        my $ord := nqp::ord(shim-unbox_s("A"));
+        my $loop := shim-unbox_i(26);
+
+        nqp::while(nqp::isgt_i($loop, 0),
+            nqp::stmts(
+                nqp::bindkey($!status, nqp::chr($ord), $val),
+                nqp::bind($ord, nqp::add_i($ord, 1)),
+                nqp::bind($loop, nqp::sub_i($loop, 1))));
+    }
+
+    method !flip(str $ord, int $to) {
+        if nqp::existskey($!status, $ord) {
+            nqp::bindkey($!status, $ord, $to)
+        } else {
+            die "OH NO! {chr($ord)} !";
+        }
+    }
+
+    multi method permit() {
+        self!populate(shim-unbox_i(1));
+        self;
+    }
+
+    multi method permit(*@codes) {
+        for @codes {
+            self!flip(shim-unbox_s($_), 1);
+        }
+        self;
+    }
+
+    multi method revoke() {
+        self!populate(shim-unbox_i(0));
+        self;
+    }
+
+    multi method revoke(*@codes) {
+        for @codes {
+            self!flip(shim-unbox_s($_), 1);
+        }
+        self;
+    }
+
+    method allowed($code) {
+        nqp::defor(nqp::atkey($!status, shim-unbox_s($code)), 0);
+    }
+}
+
 grammar Pod6::Grammar does GramError {
     token TOP {
         :my @*VM_MARGINS := nqp::list();
         :my $*CAN_CODE;
         :my $*CAN_PARA;
         :my $*FC_BLANKSTOP;
+        :my @*FC_ALLOWED := nqp::list();
 
         # TO-CORE stuff we won't need
         :my @*WORRIES;
@@ -289,6 +347,27 @@ grammar Pod6::Grammar does GramError {
         ^^ \h* <.end_line>
     }
 
+    # FC allowance methods
+
+    method now-permit-all() {
+        nqp::push(@*FC_ALLOWED, FCAllow.new.permit);
+        self;
+    }
+
+    method now-revoke-all() {
+        nqp::push(@*FC_ALLOWED, FCAllow.new.revoke);
+        self;
+    }
+
+    method fc-cando($item) {
+        nqp::atpos(@*FC_ALLOWED, -1).allowed($item);
+    }
+
+    method fc-pop() {
+        nqp::pop(@*FC_ALLOWED);
+        self;
+    }
+
     # high-level block handling
 
     token block {
@@ -297,7 +376,7 @@ grammar Pod6::Grammar does GramError {
 
         <block_kind>
 
-        <.unprime_line>
+        <.unprime_line> <.fc-pop>
     }
 
     proto token block_kind {*}
@@ -362,19 +441,19 @@ grammar Pod6::Grammar does GramError {
     }
 
     token standard_name {
-        | code                        { $*CAN_CODE := 1 }
-        | comment
-        | data
-        | defn    { $*CAN_PARA := 1 }
-        | finish  { $*CAN_PARA := 1 }
-        | head
-        | input
-        | item    { $*CAN_PARA := 1 } { $*CAN_CODE := 1 }
-        | nested  { $*CAN_PARA := 1 } { $*CAN_CODE := 1 }
-        | output
-        | para
-        | pod     { $*CAN_PARA := 1 } { $*CAN_CODE := 1 }
-        | table
+        | code                        { $*CAN_CODE := 1 } <.now-revoke-all>
+        | comment                                         <.now-permit-all>
+        | data                                            <.now-permit-all>
+        | defn    { $*CAN_PARA := 1 }                     <.now-permit-all>
+        | finish  { $*CAN_PARA := 1 }                     <.now-permit-all>
+        | head                                            <.now-permit-all>
+        | input                                           <.now-permit-all>
+        | item    { $*CAN_PARA := 1 } { $*CAN_CODE := 1 } <.now-permit-all>
+        | nested  { $*CAN_PARA := 1 } { $*CAN_CODE := 1 } <.now-permit-all>
+        | output                                          <.now-permit-all>
+        | para                                            <.now-permit-all>
+        | pod     { $*CAN_PARA := 1 } { $*CAN_CODE := 1 } <.now-permit-all>
+        | table                                           <.now-permit-all>
     }
 
     token semantic_standard_name {
@@ -411,7 +490,7 @@ grammar Pod6::Grammar does GramError {
         | INDEX          | INDICES
         | FOREWORD       | FOREWORDS
         | SUMMARY        | SUMMARIES
-        ] { $*CAN_PARA := 1; $*CAN_CODE := 1 }
+        ] { $*CAN_PARA := 1; $*CAN_CODE := 1; self.now-permit-all }
     }
 
     token not_name {
@@ -500,12 +579,13 @@ grammar Pod6::Grammar does GramError {
         # TOCORE *-1 -> -1
         (\h+) {self.prime_line(~$0); nqp::push(@*VM_MARGINS, nqp::add_i(nqp::pop(@*VM_MARGINS), @*VM_MARGINS[*-1]))}
 
-        :my $*FC_BLANKSTOP := 1; # implied code block overrides existing FC setting
+        :my $*FC_BLANKSTOP := 1;  # implied code block overrides existing FC setting
+        <.now-revoke-all>         # don't allow formatting codes by default
 
         <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
         [<!blank_line> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
 
-        <.unprime_line>
+        <.unprime_line> <.fc-pop>
     }
 
     multi token pseudopara:sym<implicit_para> {
@@ -534,7 +614,7 @@ grammar Pod6::Grammar does GramError {
         :my $endcond;
         :my $opener;
         :my $closeleft := shim-unbox_i(1);
-        $<which>=[ <[A..Z]> ]
+        $<which>=[ <[A..Z]> ] <?{$¢.fc-cando(~$<which>)}>
         [
         | $<restart>=(\<+) {$opener := "<"; $endcond := ">" x (~$<restart>).chars}
         | $<restart>=(\«+) {$opener := "«"; $endcond := "»" x (~$<restart>).chars}
@@ -589,6 +669,13 @@ my $testpod = q:to/NOTPOD/;
 NOTPOD
 
 Pod6::Grammar.parse($testpod);
-for @<block>[0]<block_kind><pseudopara>[2]<line> {
-    say ~$_
+
+for @<block>[0]<block_kind><pseudopara>[0]<one_token_text> {
+    say ~$_;
+}
+
+for @<block>[0]<block_kind><pseudopara>[2]<line>[0..*-1] {
+    for $_<one_token_text> {
+        say ~$_
+    }
 }
