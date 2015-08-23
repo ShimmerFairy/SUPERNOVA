@@ -224,70 +224,55 @@ role GramError {
     }
 }
 
-# TO-CORE not sure if having this class would be good in core
-class FCAllow {
-    # TO-CORE should be %
-    has $!status;
+# TO-CORE nqp-ify class
+class PodScope {
+    has $!fc-need-allow = False;
+    has @!fc-allowed;
+    has $!fc-blankstop = True;
+    has $!vmargin = 0;
+    has $!implied-para = False;
+    has $!implied-code = False;
 
-    submethod BUILD {
-        $!status := nqp::hash();
+    has $!locked-scope = False; # for things like =config, to avoid other rules changing stuff
+
+    method lock-scope   { $!locked-scope = True  }
+    method unlock-scope { $!locked-scope = False }
+
+    method blanks-stop-fc($a) { unless $!locked-scope { $!fc-blankstop = ?$a } }
+    method fc-stop-at-blank   { $!fc-blankstop }
+
+    method disable-fc { unless $!locked-scope { $!fc-need-allow = True } }
+    method allow-fc($fc) {
+        unless $!locked-scope {
+            die "wrong fc $fc" unless $fc ~~ "A".."Z";
+            @!fc-allowed.push($fc)
+        }
     }
-
-    method !populate(int $val) {
-        my $ord := nqp::ord(shim-unbox_s("A"));
-        my $loop := shim-unbox_i(26);
-
-        nqp::while(nqp::isgt_i($loop, 0),
-            nqp::stmts(
-                nqp::bindkey($!status, nqp::chr($ord), $val),
-                nqp::bind($ord, nqp::add_i($ord, 1)),
-                nqp::bind($loop, nqp::sub_i($loop, 1))));
-    }
-
-    method !flip(str $ord, int $to) {
-        if nqp::existskey($!status, $ord) {
-            nqp::bindkey($!status, $ord, $to)
+    method can-fc($fc) {
+        if $!fc-need-allow {
+            $fc ~~ @!fc-allowed;
         } else {
-            die "OH NO! {chr($ord)} !";
+            $fc ~~ "A".."Z"
         }
     }
 
-    multi method permit() {
-        self!populate(shim-unbox_i(1));
-        self;
-    }
+    method imply-para { unless $!locked-scope { $!implied-para = True } }
+    method imply-code { unless $!locked-scope { $!implied-code = True } }
+    method unimply-para { unless $!locked-scope { $!implied-para = False } }
+    method unimply-code { unless $!locked-scope { $!implied-code = False } }
+    method can-para { $!implied-para }
+    method can-code { $!implied-code }
 
-    multi method permit(*@codes) {
-        for @codes {
-            self!flip(shim-unbox_s($_), 1);
-        }
-        self;
-    }
-
-    multi method revoke() {
-        self!populate(shim-unbox_i(0));
-        self;
-    }
-
-    multi method revoke(*@codes) {
-        for @codes {
-            self!flip(shim-unbox_s($_), 1);
-        }
-        self;
-    }
-
-    method allowed($code) {
-        nqp::defor(nqp::atkey($!status, shim-unbox_s($code)), 0);
-    }
+    multi method set-margin(Int $wsnum) { unless $!locked-scope { $!vmargin = $wsnum } }
+    multi method set-margin(Str $char) { unless $!locked-scope { $!vmargin = $char.substr(0, 1) } }
+    method margin-is-char { $!vmargin ~~ Str }
+    method margin-is-size { $!vmargin ~~ Int }
+    method get-margin { $!vmargin }
 }
 
 grammar Pod6::Grammar does GramError {
     token TOP {
-        :my @*V_MARGINS := nqp::list();
-        :my $*CAN_CODE;
-        :my $*CAN_PARA;
-        :my $*FC_BLANKSTOP;
-        :my @*FC_ALLOWED := nqp::list();
+        :my @*POD_SCOPES := nqp::list();
 
         # TO-CORE stuff we won't need
         :my @*WORRIES;
@@ -317,10 +302,9 @@ grammar Pod6::Grammar does GramError {
         my $de-tabbed := nqp::split("\t", shim-unbox_s($margin));
 
         if nqp::elems($de-tabbed) == 1 {
-            nqp::push(@*V_MARGINS, nqp::chars($margin));
+            @*POD_SCOPES[*-1].set-margin(nqp::chars($margin));
         } else {
-            nqp::push(
-                @*V_MARGINS,
+            @*POD_SCOPES[*-1].set-margin(
                 nqp::chars(
                     nqp::join(
                         nqp::x(
@@ -332,13 +316,8 @@ grammar Pod6::Grammar does GramError {
         self;
     }
 
-    method unprime_line {
-        nqp::pop(@*V_MARGINS);
-        self;
-    }
-
     token start_line {
-        ^^    " " ** {@*V_MARGINS[*-1]}
+        ^^    " " ** { @*POD_SCOPES[*-1].get-margin() }
     }
 
     token end_line {
@@ -353,25 +332,25 @@ grammar Pod6::Grammar does GramError {
         <.blank_line> || $
     }
 
-    # FC allowance methods
+    # @*POD_SCOPES handlers
 
-    method now-permit-all() {
-        nqp::push(@*FC_ALLOWED, FCAllow.new.permit);
-#        say "NPA {+@*FC_ALLOWED} {self.MATCH.Str}".indent(+@*FC_ALLOWED * 2);
+    method enter_scope {
+        nqp::push(@*POD_SCOPES, PodScope.new);
         self;
     }
 
-    method now-revoke-all() {
-        nqp::push(@*FC_ALLOWED, FCAllow.new.revoke);
+    method exit_scope {
+        nqp::pop(@*POD_SCOPES);
         self;
     }
 
-    method fc-cando($item) {
-        nqp::atpos(@*FC_ALLOWED, -1).allowed($item);
+    method lock_scope {
+        @*POD_SCOPES[*-1].lock-scope();
+        self;
     }
 
-    method fc-pop() {
-        nqp::pop(@*FC_ALLOWED);
+    method unlock_scope {
+        @*POD_SCOPES[*-1].unlock-scope();
         self;
     }
 
@@ -379,11 +358,11 @@ grammar Pod6::Grammar does GramError {
 
     token block {
         ^^ $<litmargin>=(\h*) <?before <new_directive>>
+        <.enter_scope>
         {self.prime_line(~$<litmargin>)}
 
         <directive>
-
-        <.unprime_line>
+        <.exit_scope>
     }
 
     proto token directive {*}
@@ -395,16 +374,15 @@ grammar Pod6::Grammar does GramError {
 
         <extra_config_line>*
 
-        {$*FC_BLANKSTOP := 0}
+        {@*POD_SCOPES[*-1].blanks-stop-fc(0)}
 
         [ <!before \h* "=end">
           [
           | <block>
-          | <.start_line> <pseudopara> <.blank_line>?
+          | <.start_line> <pseudopara>
+          | <.blank_line>
           ]
         ]*
-
-        <.fc-pop>
 
         <.start_line> "=end" <.ws> [$<block_name>
                                    || <badname=.block_name> {$<badname>.CURSOR.panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
@@ -418,11 +396,9 @@ grammar Pod6::Grammar does GramError {
 
         <extra_config_line>*
 
-        {$*FC_BLANKSTOP := 1}
+        {@*POD_SCOPES[*-1].blanks-stop-fc(1)}
 
         <.start_line> <pseudopara>
-
-        <.fc-pop>
 
         <.blank_or_eof>
     }
@@ -430,32 +406,26 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<abbr> {
         \= <!not_name> <block_name> <.ws>
 
-        # Implicit code blocks only work if started on the next line, the other
-        # possibilities can start on the same line.
+        {@*POD_SCOPES[*-1].blanks-stop-fc(1)}
 
-        {$*FC_BLANKSTOP := 1}
+        # implied code blocks can only start on the next line, since only there
+        # can we check for indentation. However, since we eat up all the
+        # whitespace on the first line (see above <.ws>), we don't need to do
+        # anything special.
 
-        [
-        | <.end_line> <.start_line> <pseudopara>
-        # XXX hackish way to disallow code blocks
-        | :my $*CAN_CODE := 0; <pseudopara>
-        ]
-
-        <.fc-pop>
+        [<.end_line> <.start_line>]? <pseudopara>
 
         <.blank_or_eof>
     }
 
     multi token directive:sym<encoding> {
         "=encoding" <.ws> # ::
-        {$*CAN_CODE := 0; $*CAN_PARA := 0} <.now-revoke-all>
-        <pseudopara>
-
-        <.fc-pop>
+        $<encoding>=[\N+ <.end_line>
+            [<!blank_or_eof> <.start_line> \N+ <.end_line>]*]
 
         <.blank_or_eof>
 
-        {$¢.worry(X::Pod6::Encoding, target-enc => ~$<pseudopara>)}
+        {$¢.worry(X::Pod6::Encoding, target-enc => ~$<encoding>)}
     }
 
     multi token directive:sym<alias> {
@@ -467,9 +437,11 @@ grammar Pod6::Grammar does GramError {
     }
 
     multi token directive:sym<config> {
-        "=config" <.ws> $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
+        "=config" <.ws> #`(::) <.lock_scope>
+        $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
         <configopt> +%% <.ws> <.end_line>
         <extra_config_line>*
+        <.unlock_scope>
     }
 
     token block_name {
@@ -480,19 +452,19 @@ grammar Pod6::Grammar does GramError {
     }
 
     token standard_name {
-        | code                        { $*CAN_CODE := 1 } <.now-revoke-all>
-        | comment                                         <.now-permit-all>
-        | data                                            <.now-permit-all>
-        | defn    { $*CAN_PARA := 1 }                     <.now-permit-all>
-        | finish  { $*CAN_PARA := 1 }                     <.now-permit-all>
-        | head                                            <.now-permit-all>
-        | input                                           <.now-permit-all>
-        | item    { $*CAN_PARA := 1 } { $*CAN_CODE := 1 } <.now-permit-all>
-        | nested  { $*CAN_PARA := 1 } { $*CAN_CODE := 1 } <.now-permit-all>
-        | output                                          <.now-permit-all>
-        | para                                            <.now-permit-all>
-        | pod     { $*CAN_PARA := 1 } { $*CAN_CODE := 1 } <.now-permit-all>
-        | table                                           <.now-permit-all>
+        | code                                       { @*POD_SCOPES[*-1].imply-code() } { @*POD_SCOPES[*-1].disable-fc() }
+        | comment
+        | data
+        | defn    { @*POD_SCOPES[*-1].imply-para() }
+        | finish  { @*POD_SCOPES[*-1].imply-para() }
+        | head
+        | input
+        | item    { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
+        | nested  { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
+        | output
+        | para
+        | pod     { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
+        | table
     }
 
     # since S26 states that each name and its plural is reserved, I decided to
@@ -531,7 +503,7 @@ grammar Pod6::Grammar does GramError {
         | IND[EX|ICES]
         | FOREWORDS?
         | SUMMAR[Y|IES]
-        ] { $*CAN_PARA := 1; $*CAN_CODE := 1; self.now-permit-all }
+        ] { @*POD_SCOPES[*-1].imply-para(); @*POD_SCOPES[*-1].imply-code() }
     }
 
     token not_name {
@@ -616,33 +588,37 @@ grammar Pod6::Grammar does GramError {
 
     proto token pseudopara {*}
     multi token pseudopara:sym<implicit_code> {
-        <?{$*CAN_CODE}> # probably want ::
-        # TOCORE *-1 -> -1
-        (\h+) {self.prime_line(~$0); nqp::push(@*V_MARGINS, nqp::add_i(nqp::pop(@*V_MARGINS), @*V_MARGINS[*-1]))}
-
-        :my $*FC_BLANKSTOP := 1;  # implied code block overrides existing FC setting
-        <.now-revoke-all>         # don't allow formatting codes by default
+        <?{@*POD_SCOPES[*-1].can-code()}> (\h+) # probably want ::
+        { self.enter_scope();
+          self.prime_line(~$0);
+          @*POD_SCOPES[*-1].set-margin(@*POD_SCOPES[*-2].get-margin() + @*POD_SCOPES[*-1].get-margin());
+          @*POD_SCOPES[*-1].blanks-stop-fc(1);
+          @*POD_SCOPES[*-1].disable-fc(); }
 
         <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
         [<!blank_or_eof> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
 
-        <.unprime_line> <.fc-pop>
+        <.exit_scope>
     }
 
     multi token pseudopara:sym<implicit_para> {
-        <?{$*CAN_PARA}> # probably want ::
+        <?{@*POD_SCOPES[*-1].can-para()}> # probably want ::
 
         # we can accept indented stuff, _if_ code blocks can't be implicit here
-        [<!{$*CAN_CODE}> \h*]?
+        [<!{@*POD_SCOPES[*-1].can-code()}> \h*]?
 
-        :my $*FC_BLANKSTOP := 1; # implied para overrides existing FC setting
+        { self.enter_scope();
+          @*POD_SCOPES[*-1].set-margin(@*POD_SCOPES[*-2].get-margin());
+          @*POD_SCOPES[*-1].blanks-stop-fc(1); }
 
         <!before <new_directive>> <one_token_text>+ <.end_line>
         [<!blank_or_eof> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
+
+        <.exit_scope>
     }
 
     multi token pseudopara:sym<nothing_implied> {
-        <!{$*CAN_PARA}> <!{$*CAN_CODE}> # probably not needed when :: used on the other multis
+        <!{@*POD_SCOPES[*-1].can-code() || @*POD_SCOPES[*-1].can-para()}> # probably not needed when :: used on the other multis
         <!before <new_directive>> <one_token_text>+ <.end_line>
         [<!blank_or_eof> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
     }
@@ -655,7 +631,7 @@ grammar Pod6::Grammar does GramError {
         :my $endcond;
         :my $opener;
         :my $closeleft := shim-unbox_i(1);
-        $<which>=[ <[A..Z]> ] <?{$¢.fc-cando(~$<which>)}>
+        $<which>=[ <[A..Z]> ] <?{@*POD_SCOPES[*-1].allow-fc(~$<which>)}>
         [
         | $<restart>=(\<+) {$opener := "<"; $endcond := ">" x (~$<restart>).chars}
         | $<restart>=(\«+) {$opener := "«"; $endcond := "»" x (~$<restart>).chars}
@@ -672,7 +648,7 @@ grammar Pod6::Grammar does GramError {
           | $endcond { $closeleft := nqp::sub_i($closeleft, 1) }
           | <.end_line>
             [
-            | [ <.new_directive> | <?{$*FC_BLANKSTOP}> <?blank_line> ]
+            | [ <.new_directive> | <?{@*POD_SCOPES[*-1].fc-stop-at-blank()}> <?blank_line> ]
               <.worry(X::Pod6::FCode::ForcedStop)>
               {$closeleft := 0}
             | <.start_line> .
@@ -684,7 +660,12 @@ grammar Pod6::Grammar does GramError {
 
     # meant as a lookahead for when we need to know if a new block would be starting at the current position
     token new_directive {
-        \h* \= [[[begin|for|end] \h+]? [<reserved_name> | <typename>]]
+        \h* \= [
+                 [
+                   [begin|for|end] \h+
+                 ]?
+                 [<reserved_name> | <typename>]
+               ]
     }
 }
 
@@ -723,5 +704,5 @@ NOTPOD
 Pod6::Grammar.parse($testpod);
 
 for @<block> {
-    say $_
+    say ~$_
 }
