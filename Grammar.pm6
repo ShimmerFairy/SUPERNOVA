@@ -192,7 +192,7 @@ role GramError {
     method cry-sorrows() {
         if +@*SORROWS == 1 && !+@*WORRIES {
             @*SORROWS[0].throw;
-        } elsif @*SORROWS > 1 {
+        } elsif @*SORROWS > 0 {
             self.give-up-ghost();
         }
         self;
@@ -298,6 +298,8 @@ grammar Pod6::Grammar does GramError {
         [<block>
          <.blank_line>*]+
 
+        [ $ || <.panic(X::Pod6::Didn'tComplete)> ]
+
         <.cry-sorrows>
         <.express-worries>
     }
@@ -347,10 +349,15 @@ grammar Pod6::Grammar does GramError {
         ^^ \h* <.end_line>
     }
 
+    token blank_or_eof {
+        <.blank_line> || $
+    }
+
     # FC allowance methods
 
     method now-permit-all() {
         nqp::push(@*FC_ALLOWED, FCAllow.new.permit);
+#        say "NPA {+@*FC_ALLOWED} {self.MATCH.Str}".indent(+@*FC_ALLOWED * 2);
         self;
     }
 
@@ -376,7 +383,7 @@ grammar Pod6::Grammar does GramError {
 
         <directive>
 
-        <.unprime_line> <.fc-pop>
+        <.unprime_line>
     }
 
     proto token directive {*}
@@ -397,6 +404,8 @@ grammar Pod6::Grammar does GramError {
           ]
         ]*
 
+        <.fc-pop>
+
         <.start_line> "=end" <.ws> [$<block_name>
                                    || <badname=.block_name> {$<badname>.CURSOR.panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
                                    ] <.ws> <.end_line>
@@ -413,11 +422,13 @@ grammar Pod6::Grammar does GramError {
 
         <.start_line> <pseudopara>
 
-        <.blank_line>
+        <.fc-pop>
+
+        <.blank_or_eof>
     }
 
     multi token directive:sym<abbr> {
-        \= <block_name> <.ws>
+        \= <!not_name> <block_name> <.ws>
 
         # Implicit code blocks only work if started on the next line, the other
         # possibilities can start on the same line.
@@ -430,12 +441,40 @@ grammar Pod6::Grammar does GramError {
         | :my $*CAN_CODE := 0; <pseudopara>
         ]
 
-        <.blank_line>
+        <.fc-pop>
+
+        <.blank_or_eof>
+    }
+
+    multi token directive:sym<encoding> {
+        "=encoding" <.ws> # ::
+        {$*CAN_CODE := 0; $*CAN_PARA := 0} <.now-revoke-all>
+        <pseudopara>
+
+        <.fc-pop>
+
+        <.blank_or_eof>
+
+        {$¢.worry(X::Pod6::Encoding, target-enc => ~$<pseudopara>)}
+    }
+
+    multi token directive:sym<alias> {
+        "=alias" <.ws> $<AVal>=[<.ident> +% \-] <.ws>
+        [<.end_line> {$¢.panic(X::Pod6::Alias, atype => "Contextual")}]?
+
+        \N+ {$¢.sorry(X::Pod6::Alias, atype => "Macro")}
+        <.end_line> <.blank_or_eof>
+    }
+
+    multi token directive:sym<config> {
+        "=config" <.ws> $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
+        <configopt> +%% <.ws> <.end_line>
+        <extra_config_line>*
     }
 
     token block_name {
         || [<standard_name> | <semantic_standard_name>]
-        || <not_name> { $¢.sorry(X::Pod6::Block::DirectiveAsName, culprit => ~$<not_name>) }
+        || <not_name> { $¢.panic(X::Pod6::Block::DirectiveAsName, culprit => ~$<not_name>) }
         || <reserved_name> { $¢.sorry(X::Pod6::Block::ReservedName, culprit => ~$<reserved_name>) }
         || <typename>
     }
@@ -585,7 +624,7 @@ grammar Pod6::Grammar does GramError {
         <.now-revoke-all>         # don't allow formatting codes by default
 
         <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
-        [<!blank_line> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
+        [<!blank_or_eof> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
 
         <.unprime_line> <.fc-pop>
     }
@@ -599,13 +638,13 @@ grammar Pod6::Grammar does GramError {
         :my $*FC_BLANKSTOP := 1; # implied para overrides existing FC setting
 
         <!before <new_directive>> <one_token_text>+ <.end_line>
-        [<!blank_line> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
+        [<!blank_or_eof> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
     }
 
     multi token pseudopara:sym<nothing_implied> {
         <!{$*CAN_PARA}> <!{$*CAN_CODE}> # probably not needed when :: used on the other multis
         <!before <new_directive>> <one_token_text>+ <.end_line>
-        [<!blank_line> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
+        [<!blank_or_eof> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
     }
 
     token one_token_text {
@@ -656,6 +695,9 @@ my $*FILENAME = "<internal-test>";
 my $testpod = q:to/NOTPOD/;
     =begin pod :!autotoc
     =       :autotoc :imconfused :!ok
+
+    =config L<> :okthen
+
     Hello there L<ALL OK >
     Everybody
 
@@ -665,19 +707,21 @@ my $testpod = q:to/NOTPOD/;
             GLORIOUS»» CODE
         HELLO SAILOR
 
+    =encoding iso8859-1
+
+    =alias FOOBAR quuxy
+
     And one more para
         Hanging indent!!~~
+
     =end pod
+
+    =encoding aosdf aoish ao
+    sdifao sodk
 NOTPOD
 
 Pod6::Grammar.parse($testpod);
 
-for @<block>[0]<directive><pseudopara>[0]<one_token_text> {
-    say ~$_;
-}
-
-for @<block>[0]<directive><pseudopara>[2]<line>[0..*-1] {
-    for $_<one_token_text> {
-        say ~$_
-    }
+for @<block> {
+    say $_
 }

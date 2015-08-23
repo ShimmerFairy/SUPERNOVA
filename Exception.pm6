@@ -103,6 +103,12 @@ class X::Pod6 is Exception {
     }
 }
 
+class X::Pod6::Didn'tComplete is X::Pod6 {
+    method message() {
+        "Pod parser ended before expected end point."
+    }
+}
+
 class X::Pod6::MismatchedEnd is X::Pod6 {
     method message() {
         "Incorrect =end directive found for block";
@@ -150,5 +156,20 @@ class X::Pod6::FCode::TooManyAngles is X::Pod6 {
 class X::Pod6::FCode::ForcedStop is X::Pod6 {
     method message() {
         "Formatting code forced to stop before ending angle bracket."
+    }
+}
+
+class X::Pod6::Encoding is X::Pod6 {
+    has $.target-enc;
+    method message() {
+        "Changing encoding of Perl 6 files NYI. Please use Unicode text instead of \"$.target-enc.chomp().subst(/\s+/," ",:g)\" for now."
+    }
+}
+
+class X::Pod6::Alias is X::Pod6 {
+    has $.atype;
+
+    method message() {
+        "$.atype aliases NYI, sorry."
     }
 }
