@@ -456,40 +456,42 @@ grammar Pod6::Grammar does GramError {
         | table                                           <.now-permit-all>
     }
 
+    # since S26 states that each name and its plural is reserved, I decided to
+    # pluralize even those that don't have a grammatical plural :P
     token semantic_standard_name {
         [
-        | NAME           | NAMES
-        | AUTHOR         | AUTHORS
-        | VERSION        | VERSIONS
-        | CREATED
-        | EMULATES
-        | EXCLUDES
-        | SYNOPSIS       | SYNOPSES
-        | DESCRIPTION    | DESCRIPTIONS
-        | USAGE          | USAGES
-        | INTERFACE      | INTERFACES
-        | METHOD         | METHODS
-        | SUBROUTINE     | SUBROUTINES
-        | OPTION         | OPTIONS
-        | DIAGNOSTIC     | DIAGNOSTICS
-        | ERROR          | ERRORS
-        | WARNING        | WARNINGS
-        | DEPENDENCY     | DEPENDENCIES
-        | BUG            | BUGS
-        | SEE\-ALSO
-        | ACKNOWLEDGMENT | ACKNOWLEDGEMENTS
-        | COPYRIGHT      | COPYRIGHTS
-        | DISCLAIMER     | DISCLAIMERS
-        | LICENCE        | LICENCES
-        | LICENSE        | LICENSES
-        | TITLE          | TITLES
-        | SECTION        | SECTIONS
-        | CHAPTER        | CHAPTERS
-        | APPENDIX       | APPENDICES
-        | TOC
-        | INDEX          | INDICES
-        | FOREWORD       | FOREWORDS
-        | SUMMARY        | SUMMARIES
+        | NAMES?
+        | AUTHORS?
+        | VERSIONS?
+        | CREATEDS?
+        | EMULATES[ES]?
+        | EXCLUDES[ES]?
+        | SYNOPS<[IE]>S
+        | DESCRIPTIONS?
+        | USAGES?
+        | INTERFACES?
+        | METHODS?
+        | SUBROUTINES?
+        | OPTIONS?
+        | DIAGNOSTICS?
+        | ERRORS?
+        | WARNINGS?
+        | DEPENDENC[Y|IES]
+        | BUGS?
+        | SEE\-ALSOS?
+        | ACKNOWLEDGMENTS?
+        | COPYRIGHTS?
+        | DISCLAIMERS?
+        | LICENCES?
+        | LICENSES?
+        | TITLES?
+        | SECTIONS?
+        | CHAPTERS?
+        | APPENDI[X|CES]
+        | TOCS?
+        | IND[EX|ICES]
+        | FOREWORDS?
+        | SUMMAR[Y|IES]
         ] { $*CAN_PARA := 1; $*CAN_CODE := 1; self.now-permit-all }
     }
 
