@@ -70,7 +70,6 @@ class X::Epitaph is Exception {
         $gist
     }
 }
-        
 
 # This should be doing X::Comp, but for simplicity sticking with Exception for
 # now (so that the typical Exception-y stuff works)
