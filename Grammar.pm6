@@ -237,6 +237,15 @@ class PodScope {
 
     has %!config;
 
+    has $!implied-para-mode = False;
+    has $!implied-code-mode = True;
+    has $!imp-code-vmargin = 0;
+
+    method enter-para { $!implied-code-mode || !$!implied-para ?? False !! ($!implied-para-mode = True) }
+    method exit-para  { $!implied-para-mode = False }
+    method enter-code { $!implied-para-mode || !$!implied-code ?? False !! ($!implied-code-mode = True) }
+    method exit-code  { $!implied-code-mode = False }
+
     method set-this-config(Str $key, Str $value) {
         # make sure the key used here isn't a valid P6 identifier, to avoid any
         # conflicts with block names
@@ -264,7 +273,7 @@ class PodScope {
         }
     }
     method can-fc($fc) {
-        if $!fc-need-allow {
+        if $!fc-need-allow || $!implied-code-mode {
             $fc ~~ @!fc-allowed;
         } else {
             $fc ~~ "A".."Z"
@@ -278,11 +287,27 @@ class PodScope {
     method can-para { $!implied-para }
     method can-code { $!implied-code }
 
-    multi method set-margin(Int $wsnum) { unless $!locked-scope { $!vmargin = $wsnum } }
-    multi method set-margin(Str $char) { unless $!locked-scope { $!vmargin = $char.substr(0, 1) } }
-    method margin-is-char { $!vmargin ~~ Str }
-    method margin-is-size { $!vmargin ~~ Int }
-    method get-margin { $!vmargin }
+    multi method set-margin(Int $wsnum, :$code) {
+        unless $!locked-scope {
+            if $code {
+                $!imp-code-vmargin = $wsnum;
+            } else {
+                $!vmargin = $wsnum;
+            }
+        }
+    }
+    multi method set-margin(Str $char, :$code) {
+        unless $!locked-scope {
+            if $code {
+                $!imp-code-vmargin = $char.substr(0, 1);
+            } else {
+                $!vmargin = $char.substr(0, 1);
+            }
+        }
+    }
+    method margin-is-char(:$code) { $code ?? $!imp-code-vmargin ~~ Str !! $!vmargin ~~ Str }
+    method margin-is-size(:$code) { $code ?? $!imp-code-vmargin ~~ Int !! $!vmargin ~~ Int }
+    method get-margin(:$code) { $code ?? $!imp-code-vmargin !! $!vmargin }
 }
 
 grammar Pod6::Grammar does GramError {
@@ -313,26 +338,39 @@ grammar Pod6::Grammar does GramError {
     # various line handlers, usually called in <.rule> form
 
     # XXX apparently we're supposed to emulate tab stops in doing this. Gr.
-    method prime_line($margin) {
+    sub numify-margin($margin) {
         my $de-tabbed := nqp::split("\t", shim-unbox_s($margin));
 
         if nqp::elems($de-tabbed) == 1 {
-            @*POD_SCOPES[*-1].set-margin(nqp::chars($margin));
+            nqp::chars($margin);
         } else {
-            @*POD_SCOPES[*-1].set-margin(
-                nqp::chars(
-                    nqp::join(
-                        nqp::x(
-                            " ",
-                            ($?TABSTOP // 8)),
-                        $de-tabbed)));
+            nqp::chars(
+                nqp::join(
+                    nqp::x(
+                        " ",
+                        ($?TABSTOP // 8)),
+                    $de-tabbed));
         }
+    }
 
+    method prime_line($margin) {
+        my $size = numify-margin($margin);
+        @*POD_SCOPES[*-1].set-margin($size);
+        self;
+    }
+
+    method prime_code_line($margin) {
+        my $size = numify-margin($margin);
+        @*POD_SCOPES[*-1].set-margin($size, :code);
         self;
     }
 
     token start_line {
-        ^^    " " ** { @*POD_SCOPES[*-1].get-margin() }
+        ^^ " " ** { @*POD_SCOPES[*-1].get-margin() }
+    }
+
+    token up_to_code { # for handling the extra indentation on implied code lines
+        ^^ " " ** { @*POD_SCOPES[*-1].get-margin(:code) }
     }
 
     token end_line {
@@ -366,6 +404,26 @@ grammar Pod6::Grammar does GramError {
 
     method unlock_scope {
         @*POD_SCOPES[*-1].unlock-scope();
+        self;
+    }
+
+    method enter_para {
+        @*POD_SCOPES[*-1].enter-para();
+        self;
+    }
+
+    method enter_code {
+        @*POD_SCOPES[*-1].enter-code();
+        self;
+    }
+
+    method exit_para {
+        @*POD_SCOPES[*-1].exit-para();
+        self;
+    }
+
+    method exit_code {
+        @*POD_SCOPES[*-1].exit-code();
         self;
     }
 
@@ -608,16 +666,14 @@ grammar Pod6::Grammar does GramError {
     proto token pseudopara {*}
     multi token pseudopara:sym<implicit_code> {
         <?{@*POD_SCOPES[*-1].can-code()}> (\h+) # probably want ::
-        { self.enter_scope();
-          self.prime_line(~$0);
-          @*POD_SCOPES[*-1].set-margin(@*POD_SCOPES[*-2].get-margin() + @*POD_SCOPES[*-1].get-margin());
-          @*POD_SCOPES[*-1].blanks-stop-fc(1);
-          @*POD_SCOPES[*-1].disable-fc(); }
+
+        <.enter_code>
+        {self.prime_code_line(~$0)}
 
         <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
-        [<!blank_or_eof> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
+        [<!blank_or_eof> <.start_line> <.up_to_code> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
 
-        <.exit_scope>
+        <.exit_code>
     }
 
     multi token pseudopara:sym<implicit_para> {
@@ -626,14 +682,12 @@ grammar Pod6::Grammar does GramError {
         # we can accept indented stuff, _if_ code blocks can't be implicit here
         [<!{@*POD_SCOPES[*-1].can-code()}> \h*]?
 
-        { self.enter_scope();
-          @*POD_SCOPES[*-1].set-margin(@*POD_SCOPES[*-2].get-margin());
-          @*POD_SCOPES[*-1].blanks-stop-fc(1); }
+        <.enter_para>
 
         <!before <new_directive>> <one_token_text>+ <.end_line>
         [<!blank_or_eof> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
 
-        <.exit_scope>
+        <.exit_para>
     }
 
     multi token pseudopara:sym<nothing_implied> {
@@ -709,7 +763,7 @@ my $testpod = q:to/NOTPOD/;
 
     =encoding iso8859-1
 
-    =alias FOOBAR quuxy
+    V<>=alias FOOBAR quuxy
 
     And one more para
         Hanging indent!!~~
