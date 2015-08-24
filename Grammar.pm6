@@ -16,7 +16,7 @@ sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
 
 sub shim-box_i(int $a) { nqp::box_i($a, Int) }
 
-#use Grammar::Tracer;
+use Grammar::Tracer;
 
 use Exception;
 
@@ -153,6 +153,9 @@ role GramError {
                                               col  => shim-box_i(nqp::atpos_i($hintlc, 1)));
 
             %opts<HINT-MATCH>:delete;
+            %opts<hint-but-no-pointer> := 0;
+        } else {
+            %opts<hint-but-no-pointer> := 1;
         }
 
         $type.new(|%opts);
@@ -216,8 +219,8 @@ role GramError {
             $ghost = X::Epitaph.new(worries => @*WORRIES, sorrows => @*SORROWS);
         }
 
-        if +@*SORROWS {
-            $ghost.throw
+        if +@*SORROWS || $panic.defined {
+            $ghost.throw;
         } else {
             print($ghost.gist)
         }
@@ -314,6 +317,8 @@ grammar Pod6::Grammar does GramError {
     token TOP {
         :my @*POD_SCOPES := nqp::list();
 
+        :my $*LAST_BEGIN;
+
         # TO-CORE stuff we won't need
         :my @*WORRIES;
         :my @*SORROWS;
@@ -321,7 +326,7 @@ grammar Pod6::Grammar does GramError {
 
         <.blank_line>*
         [<block>
-         <.blank_line>*]+
+         <.blank_line>*]*
 
         [ $ || <.panic(X::Pod6::Didn'tComplete)> ]
 
@@ -460,6 +465,7 @@ grammar Pod6::Grammar does GramError {
         <.start_line> "=end" <.ws> [$<block_name>
                                    || <badname=.block_name> {$<badname>.CURSOR.panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
                                    ] <.ws> <.end_line>
+        {$*LAST_BEGIN = $/} # for hints on extraneous =end blocks
     }
 
     multi token directive:sym<para> {
@@ -515,6 +521,17 @@ grammar Pod6::Grammar does GramError {
         <configset> <.end_line>
         <extra_config_line>*
         <.unlock_scope>
+    }
+
+    multi token directive:sym<end> {
+        "=end" <.ws> <block_name> #`(::)
+        {
+            if $*LAST_BEGIN {
+                $¢.panic(X::Pod6::ExtraEnd, HINT-MATCH => $*LAST_BEGIN);
+            } else {
+                $¢.panic(X::Pod6::ExtraEnd);
+            }
+        }
     }
 
     token block_name {
@@ -747,6 +764,8 @@ grammar Pod6::Grammar does GramError {
 my $*FILENAME = "<internal-test>";
 
 my $testpod = q:to/NOTPOD/;
+
+    =end everything
     =begin pod :!autotoc
     =       :autotoc :imconfused :!ok
 
@@ -769,6 +788,8 @@ my $testpod = q:to/NOTPOD/;
         Hanging indent!!~~
 
     =end pod
+
+        =end code
 
     =encoding aosdf aoish ao
     sdifao sodk

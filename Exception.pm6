@@ -31,7 +31,7 @@ class X::Epitaph is Exception {
             $gist ~= "Main issue:\n";
             $gist ~= $!panic.gist(:!singular).indent(4) ~ "\n";
 
-            with @!sorrows {
+            if +@!sorrows {
                 $gist ~= "\nOther problems:\n";
             }
         } elsif +@!sorrows {
@@ -70,6 +70,7 @@ class X::Pod6 is Exception {
     has X::FLC $.err-flc;
 
     has $.hint-message;
+    has $.hint-but-no-pointer;
     has $.hint-beforepoint;
     has $.hint-afterpoint;
 
@@ -92,10 +93,12 @@ class X::Pod6 is Exception {
         with $.hint-message {
             my $hint;
             $hint ~= "\n\n$.hint-message\n";
-            $hint ~= "at $!hint-flc.getloc()\n";
-            $hint ~= "------>|$green$.hint-beforepoint";
-            $hint ~= "$yellow$hintat";
-            $hint ~= "{$green}{$.hint-afterpoint.chomp}$reset";
+            unless $.hint-but-no-pointer {
+                $hint ~= "at $!hint-flc.getloc()\n";
+                $hint ~= "------>|$green$.hint-beforepoint";
+                $hint ~= "$yellow$hintat";
+                $hint ~= "{$green}{$.hint-afterpoint.chomp}$reset";
+            }
             $gist ~= $hint.indent(4);
         }
 
@@ -171,5 +174,20 @@ class X::Pod6::Alias is X::Pod6 {
 
     method message() {
         "$.atype aliases NYI, sorry."
+    }
+}
+
+class X::Pod6::ExtraEnd is X::Pod6 {
+    method message() {
+        "An unmatched =end directive was found"
+    }
+
+    method hint-message() {
+        if $.hint-but-no-pointer {
+            # XXX use X::Comp's "expecting" for those possibilites?
+            "There was no delimited block before this. Perhaps you meant =begin (or =finish if expecting P5's __END__)?"
+        } else {
+            "The last =begin was here"
+        }
     }
 }
