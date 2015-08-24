@@ -235,6 +235,21 @@ class PodScope {
 
     has $!locked-scope = False; # for things like =config, to avoid other rules changing stuff
 
+    has %!config;
+
+    method set-this-config(Str $key, Str $value) {
+        # make sure the key used here isn't a valid P6 identifier, to avoid any
+        # conflicts with block names
+        %!config<-THIS->{$key} = $value;
+    }
+
+    method set-config-for(Str $block, Str $key, Str $value) {
+        %!config{$block}{$key} = $value;
+    }
+
+    method get-this-config(Str $key) { %!config<-THIS->{$key} }
+    method get-config-for(Str $block, Str $key) { %!config{$block}{$key} }
+
     method lock-scope   { $!locked-scope = True  }
     method unlock-scope { $!locked-scope = False }
 
@@ -370,7 +385,7 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<delim> {
         "=begin" <.ws> # XXX want :: here
             <block_name> <.ws>
-            <configopt> *%% <.ws> <.end_line>
+            <configset> <.end_line>
 
         <extra_config_line>*
 
@@ -392,7 +407,7 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<para> {
         "=for" <.ws> # XXX want :: here
             <block_name> <.ws>
-            <configopt> *%% <.ws> <.end_line>
+            <configset> <.end_line>
 
         <extra_config_line>*
 
@@ -439,7 +454,7 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<config> {
         "=config" <.ws> #`(::) <.lock_scope>
         $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
-        <configopt> +%% <.ws> <.end_line>
+        <configset> <.end_line>
         <extra_config_line>*
         <.unlock_scope>
     }
@@ -579,9 +594,13 @@ grammar Pod6::Grammar does GramError {
         | ([\S & <-[\])>]>]+) {$¢.panic(X::Pod6::BadConfig, message => "Unknown term \"$0\" in configuration. Only constants are allowed.")}
     }
 
+    token configset {
+        <configopt> +%% [<.ws> [$<badcomma>=[\,] <.ws> {$<badcomma>[*-1].CURSOR.worry(X::Pod6::BadConfig::Comma)}]?]
+    }
+
     token extra_config_line {
         <.start_line> \= \h+
-        <configopt> +%% [<.ws> [$<badcomma>=[\,] <.ws> {$<badcomma>[*-1].CURSOR.worry(X::Pod6::BadConfig::Comma)}]?]
+        <configset>
         <.end_line>
     }
 
@@ -706,3 +725,9 @@ Pod6::Grammar.parse($testpod);
 for @<block> {
     say ~$_
 }
+
+# get configs workings
+
+# have "implied para" and "implied code" modes on PodScope, to avoid creating extra scopes
+
+# end on blank line, eof, or new block
