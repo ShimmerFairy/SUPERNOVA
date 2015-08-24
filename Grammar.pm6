@@ -16,7 +16,7 @@ sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
 
 sub shim-box_i(int $a) { nqp::box_i($a, Int) }
 
-use Grammar::Tracer;
+#use Grammar::Tracer;
 
 use Exception;
 
