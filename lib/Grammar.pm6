@@ -508,7 +508,7 @@ grammar Pod6::Grammar does GramError {
     }
 
     token one_token_text {
-        \N | <format_code>
+        [<!format_code> \N]+ | <format_code>
     }
 
     token format_code {

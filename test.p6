@@ -11,7 +11,6 @@ my $*FILENAME = "<internal-test>";
 
 my $testpod = q:to/NOTPOD/;
 
-    =end everything
     =begin pod :!autotoc
     =       :autotoc :imconfused :!ok
 
@@ -35,8 +34,6 @@ my $testpod = q:to/NOTPOD/;
 
     =end pod
 
-        =end code
-
     =encoding aosdf aoish ao
     sdifao sodk
 NOTPOD
@@ -44,5 +41,5 @@ NOTPOD
 Pod6::Grammar.parse($testpod);
 
 for @<block> {
-    say ~$_
+    say $_
 }

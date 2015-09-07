@@ -62,7 +62,7 @@ class X::Epitaph is Exception {
             $gist ~= "\nThe problems above prevented the parser from producing something useful (however it was able to parse everything). Fixing them will allow useful output from the compiler.";
         } elsif +@!worries {
             $gist ~= "\nThe potential difficulties above may cause unexpected results, since they don't prevent the compiler from completing.\n";
-            $gist ~= "Fix or suppress the issues as needed to avoid any doubt in execution.";
+            $gist ~= "Fix or suppress the issues as needed to avoid any doubt in execution.\n";
         } else {
             $gist ~= "\nSomehow threw an Epitaph without anything to actually throw. This likely indicates a deeper problem."
         }
