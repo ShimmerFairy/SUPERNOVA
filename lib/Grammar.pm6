@@ -19,7 +19,7 @@ sub shim-box_i(int $a) { nqp::box_i($a, Int) }
 use Exception;
 use GrammarError;
 
-#use Grammar::Tracer;
+use Grammar::Tracer;
 
 # TO-CORE nqp-ify class
 class PodScope {
@@ -302,7 +302,7 @@ grammar Pod6::Grammar does GramError {
     }
 
     multi token directive:sym<alias> {
-        "=alias" <.ws> $<AVal>=[<.ident> +% \-] <.ws>
+        "=alias" <.ws> $<AVal=.p6ident> <.ws>
         [<.end_line> {$¢.panic(X::Pod6::Alias, atype => "Contextual")}]?
 
         \N+ {$¢.sorry(X::Pod6::Alias, atype => "Macro")}
@@ -402,69 +402,53 @@ grammar Pod6::Grammar does GramError {
     token reserved_name { [<:Lower>+ | <:Upper>+] <!ww> }
 
     token typename {
-        | <:Upper>+ <:Lower> [<:Upper>|<:Lower>]*
-        | <:Lower>+ <:Upper> [<:Lower>|<:Upper>]*
+        <p6ident>
+        <!{ ~$<p6ident> eq (~$<p6ident>).uc || ~$<p6ident> eq (~$<p6ident>).lc }>
     }
 
-    # unfortunately, even after transferring to CORE, we'll need our own rule to
-    # handle config options, because we can only accept constant keys and
-    # values, but Perl6::Grammar's parser allow non-constants
-    token configopt {
-        :my $*ADV_BINARY := -1;
+    proto token config_option {*}
+
+    multi token config_option:sym<colonpair> {
+        ':'
         [
-        | \: [\! {$*ADV_BINARY := 0}]?
-          [$<ckey>=[<.ident> +% \-] || <.non-const-term>]
-          $<cvalue>=[
-            | [
-              | <podassociative>
-              | <podpositional>
-              | \< ~ \> $<podqw>=[ [[<!before \h | <?[>]>> .]+] +%% <.ws> ]
-              | \( ~ \) [[<podstr>|<podint>]||<.non-const-term>]
-              ] [ <?{$*ADV_BINARY == 0}> {$¢.panic(X::Pod6::BadConfig, message => "Cannot negate adverb and provide value ~$<cvalue>")} ]
-            | {unless $*ADV_BINARY == 0 { $*ADV_BINARY := 1} }
-              [ <!before \s> $<badtext>=[[\S & <-[,]>]+] {$<badtext>.CURSOR.panic(X::Pod6::BadConfig, message => "Unknown text \"$0\" after key")} ]?
-          ]
-        | [$<ckey>=[<.ident> +% \-] || <.non-const-term>]
-          <.ws> ["=>" || {$¢.panic(X::Pod6::BadConfig, message => "Bad key; expecting => after key or : before it")}]
-          <.ws>
-          $<cvalue>=[
-              [
-              | <podint>
-              | <podstr>
-              | <podpositional>
-              | <podassociative>
-              ] || <.non-const-term>
-                || {$¢.panic(X::Pod6::BadConfig, message => "No value found after fatarrow; please use :$<ckey> if you meant to set a binary flag")}
-          ]
+        | $<neg>=['!'] <key=.p6ident>
+        | <?[$@%&]> <.panic(X::Pod6::BadConfig, message => "Attempted to use variable as colonpair; only constants are allowed in Pod configuration")>
+        | <key=.p6ident> $<value>=['(' ~ ')' [<podint>|<podstr>] | <cgroup>]?
         ]
+    }
+
+    multi token config_option:sym<fatarrow> {
+        <key=.p6ident> <.ws> '=>' <.ws> [<cgroup>|<podint>|<podstr>]
+    }
+
+    token cgroup {
+        | '[' ~ ']' [$<sbitem>=(<podint>|<podstr>) +% [<.ws> ',' <.ws>]]
+        | '<' ~ '>' [$<qwitem>=([<![>]> <!ws> .]+) +% <.ws>]
+        | '{' ~ '}' [$<cbitem>=(<config_option>) +% [<.ws> ',' <.ws>]]
     }
 
     # TO-CORE: podint will likely want to parse any <integer>, and podstr any
     # kind of Q lang (though variable interpolation is disallowed)
     token podint { \d+ }
     token podstr {
-        | \' ~ \' [<-['\\]> | \\\\ | \\\']+
-        | \" ~ \" [<-["\\]> | \\\\ | \\\"]+
-    }
-
-    token podpositional {
-        \[ ~ \] [[[<podint>|<podstr>]||<.non-const-term>] +% [<.ws> \, <.ws>]]
-    }
-
-    token podassociative {
-        \{ ~ \} [<configopt> +% [<.ws> \, <.ws>]]
+        | \' ~ \' [<-[\'\\]> | \\\\ | \\\']+
+        | \" ~ \" [<-[\"\\]> | \\\\ | \\\"]+
     }
 
     # this token lives to produce an error. Do not call unless/until you know
     # it's needed
     token non-const-term {
-        | <?before <+[$@%&]> | "::"> (\S\S?! <.ident>) {$¢.panic(X::Pod6::BadConfig, message => "Variable \"$0\" found in pod configuration; only constants are allowed")}
+        | <?before <+[$@%&]> | "::"> (\S\S?! <.p6ident>) {$¢.panic(X::Pod6::BadConfig, message => "Variable \"$0\" found in pod configuration; only constants are allowed")}
         | "#" <.panic(X::Pod6::BadConfig, message => "Unexpected # in pod configuration. (Were you trying to comment out something?)")>
         | ([\S & <-[\])>]>]+) {$¢.panic(X::Pod6::BadConfig, message => "Unknown term \"$0\" in configuration. Only constants are allowed.")}
     }
 
     token configset {
-        <configopt> +%% [<.ws> [$<badcomma>=[\,] <.ws> {$<badcomma>[*-1].CURSOR.worry(X::Pod6::BadConfig::Comma)}]?]
+        <config_option> +%% [ <.ws>
+                              [ $<badcomma>=[\,] <.ws>
+                                {$<badcomma>[*-1].CURSOR.worry(X::Pod6::BadConfig::Comma)}
+                              ]?
+                            ]
     }
 
     token extra_config_line {
@@ -495,54 +479,157 @@ grammar Pod6::Grammar does GramError {
 
         <.enter_para>
 
-        <!before <new_directive>> <one_token_text>+ <.end_line>
-        [<!blank_or_eof> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
+        <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
+        [<!blank_or_eof> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
 
         <.exit_para>
     }
 
     multi token pseudopara:sym<nothing_implied> {
         <!{@*POD_SCOPES[*-1].can-code() || @*POD_SCOPES[*-1].can-para()}> # probably not needed when :: used on the other multis
-        <!before <new_directive>> <one_token_text>+ <.end_line>
-        [<!blank_or_eof> <.start_line> <!before <new_directive>> <one_token_text>+ <.end_line>]*
+        <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
+        [<!blank_or_eof> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
     }
 
     token one_token_text {
-        [<!format_code> \N]+ | <format_code>
+        [<!formatting_code> \N]+ | <formatting_code>
     }
 
-    token format_code {
-        :my $endcond;
-        :my $opener;
-        :my $closeleft := shim-unbox_i(1);
-        $<which>=[ <[A..Z]> ] <?{@*POD_SCOPES[*-1].allow-fc(~$<which>)}>
-        [
-        | $<restart>=(\<+) {$opener := "<"; $endcond := ">" x (~$<restart>).chars}
-        | $<restart>=(\«+) {$opener := "«"; $endcond := "»" x (~$<restart>).chars}
-        ]
+    token fc_content {
+        :my $in-to-close := shim-unbox_i(0);
 
-        [ <?{$closeleft > 0}>
+        [
+        | <formatting_code>
+        | $*OPENSTR [ $*OPENCHAR+ {$¢.panic(X::Pod6::FCode::TooManyAngles)} ]?
+          { $in-to-close := nqp::add_i($in-to-close, 1) }
+        | <?{$in-to-close > 0}> $*CLOSESTR { $in-to-close := nqp::sub_i($in-to-close, 1) }
+        | <.end_line>
           [
-          | $<restart>
-            [
-            | $opener+ { $¢.panic(X::Pod6::FCode::TooManyAngles) }
-            | { $closeleft := nqp::add_i($closeleft, 1) }
+          | [
+            | <.new_directive>
+            | <?{@*POD_SCOPES[*-1].fc-stop-at-blank()}> <?blank_line>
             ]
-          | <format_code>
-          | $endcond { $closeleft := nqp::sub_i($closeleft, 1) }
-          | <.end_line>
-            [
-            | [ <.new_directive> | <?{@*POD_SCOPES[*-1].fc-stop-at-blank()}> <?blank_line> ]
-              <.worry(X::Pod6::FCode::ForcedStop)>
-              {$closeleft := 0}
-            | <.start_line> .
-            ]
-          | <!before $endcond> \N
+            <.worry(X::Pod6::FCode::ForcedStop)>
+            { $in-to-close := shim-unbox_i(0) }
+          | <.start_line> .
           ]
+        | <!before $*CLOSESTR | @*SUB_STOP> \N
         ]+
     }
 
-    # meant as a lookahead for when we need to know if a new block would be starting at the current position
+    proto token formatting_code {*}
+
+    multi token formatting_code:sym<D> {
+        <sym> <?{@*POD_SCOPES[*-1].allow-fc("D")}>
+
+        :my $*OPENCHAR;
+        :my $*OPENSTR;
+        :my $*CLOSESTR;
+        :my @*SUB_STOP := ['|'];
+
+        <.open_fc>
+
+        <defined=.fc_content> ['|' {$*SUB_STOP := [';']} <synonym=.fc_content> +% ';']?
+
+        <.close_fc>
+    }
+
+    multi token formatting_code:sym<E> {
+        <sym> <?{@*POD_SCOPES[*-1].allow-fc("E")}>
+
+        :my $*OPENCHAR;
+        :my $*OPENSTR;
+        :my $*CLOSESTR;
+        :my @*SUB_STOP := [';'];
+
+        <.open_fc>
+
+        <entity=.fc_content> +% ';'
+
+        <.close_fc>
+    }
+
+    multi token formatting_code:sym<L> {
+        <sym> <?{@*POD_SCOPES[*-1].allow-fc("L")}>
+
+        :my $*OPENCHAR;
+        :my $*OPENSTR;
+        :my $*CLOSESTR;
+        :my @*SUB_STOP := ['|'];
+
+        <.open_fc>
+
+        <displayish=.fc_content> ['|' {@*SUB_STOP := []} <definite_link=.fc_content>]
+    }
+
+    multi token formatting_code:sym<M> {
+        <sym> <?{@*POD_SCOPES[*-1].allow-fc("M")}>
+
+        :my $*OPENCHAR;
+        :my $*OPENSTR;
+        :my $*CLOSESTR;
+        :my @*SUB_STOP;
+
+        <.open_fc>
+
+        <typename=.p6ident> \: <verbatim=.fc_content>
+
+        <.close_fc>
+    }
+
+    multi token formatting_code:sym<X> {
+        <sym> <?{@*POD_SCOPES[*-1].allow-fc("X")}>
+
+        :my $*OPENCHAR;
+        :my $*OPENSTR;
+        :my $*CLOSESTR;
+        :my @*SUB_STOP := ['|'];
+
+        <.open_fc>
+
+        <displayish=.fc_content>
+        [ '|' {@*SUB_STOP := [',',';']}
+          [ $<entry>=(<fc_content> [',' <subentry=.fc_content>]*) ] +% ';'
+        ]?
+
+        <.close_fc>
+    }
+
+    multi token formatting_code:sym<normal> {
+       $<which>=[<[ABCIKNPRSTUVZ]>] <?{@*POD_SCOPES[*-1].allow-fc(~$<which>)}>
+
+        :my $*OPENCHAR;
+        :my $*OPENSTR;
+        :my $*CLOSESTR;
+        :my @*SUB_STOP;
+
+        <.open_fc>
+
+        <fc_content>
+
+        <.close_fc>
+    }
+
+    token open_fc {
+        | ('<'+) { $*OPENSTR := ~$0; $*OPENCHAR := '<'; $*CLOSESTR := '>' x nqp::chars($*OPENSTR) }
+        | ('«'+) { $*OPENSTR := ~$0; $*OPENCHAR := '«'; $*CLOSESTR := '»' x nqp::chars($*OPENSTR) }
+    }
+
+    token close_fc { $*CLOSESTR }
+
+    # TO-CORE use the actual rule instead of p6ident, the version that doesn't
+    # allow ::
+    token p6ident {
+        [<.alpha>|_]
+        [
+        | <.alnum>
+        | _
+        | [\- | \'] [<.alpha>|_]
+        ]*
+    }
+
+    # meant as a lookahead for when we need to know if a new block would be
+    # starting at the current position
     token new_directive {
         \h* \= [
                  [
