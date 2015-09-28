@@ -19,7 +19,7 @@ sub shim-box_i(int $a) { nqp::box_i($a, Int) }
 use Exception;
 use GrammarError;
 
-use Grammar::Tracer;
+#use Grammar::Tracer;
 
 # TO-CORE nqp-ify class
 class PodScope {
@@ -169,7 +169,7 @@ grammar Pod6::Grammar does GramError {
     }
 
     token up_to_code { # for handling the extra indentation on implied code lines
-        ^^ " " ** { @*POD_SCOPES[*-1].get-margin(:code) }
+        " " ** { @*POD_SCOPES[*-1].get-margin(:code) }
     }
 
     token end_line {
@@ -248,13 +248,13 @@ grammar Pod6::Grammar does GramError {
 
         {@*POD_SCOPES[*-1].blanks-stop-fc(0)}
 
-        [ <!before \h* "=end">
+        $<contents>=( <!before \h* "=end">
           [
           | <block>
           | <.start_line> <pseudopara>
           | <.blank_line>
           ]
-        ]*
+        )*
 
         <.start_line> "=end" <.ws> [$<block_name>
                                    || <badname=.block_name> {$<badname>.CURSOR.panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
@@ -341,8 +341,8 @@ grammar Pod6::Grammar does GramError {
         | data
         | defn    { @*POD_SCOPES[*-1].imply-para() }
         | finish  { @*POD_SCOPES[*-1].imply-para() }
-        | head
-        | input
+        | head $<level>=[\d+]
+        | input $<level>=[\d+]?
         | item    { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
         | nested  { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
         | output
@@ -467,7 +467,6 @@ grammar Pod6::Grammar does GramError {
 
         <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
         [<!blank_or_eof> <.start_line> <.up_to_code> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
-
         <.exit_code>
     }
 
@@ -499,7 +498,6 @@ grammar Pod6::Grammar does GramError {
         :my $in-to-close := shim-unbox_i(0);
 
         [
-        | <formatting_code>
         | $*OPENSTR [ $*OPENCHAR+ {$¢.panic(X::Pod6::FCode::TooManyAngles)} ]?
           { $in-to-close := nqp::add_i($in-to-close, 1) }
         | <?{$in-to-close > 0}> $*CLOSESTR { $in-to-close := nqp::sub_i($in-to-close, 1) }
@@ -511,9 +509,9 @@ grammar Pod6::Grammar does GramError {
             ]
             <.worry(X::Pod6::FCode::ForcedStop)>
             { $in-to-close := shim-unbox_i(0) }
-          | <.start_line> .
+          | <.start_line> <one_token_text>
           ]
-        | <!before $*CLOSESTR | @*SUB_STOP> \N
+        | <!before $*CLOSESTR | @*SUB_STOP> <one_token_text>
         ]+
     }
 

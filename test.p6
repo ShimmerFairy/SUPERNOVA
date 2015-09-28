@@ -4,6 +4,7 @@ use v6;
 
 use lib "lib/";
 use Grammar;
+use Actions;
 
 # TEMP TEST
 
@@ -38,8 +39,4 @@ my $testpod = q:to/NOTPOD/;
     sdifao sodk
 NOTPOD
 
-Pod6::Grammar.parse($testpod);
-
-for @<block> {
-    say $_
-}
+say Pod6::Grammar.parse($testpod, :actions(Pod6::Actions)).ast».gist.join("\n");
