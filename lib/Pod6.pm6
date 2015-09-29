@@ -225,8 +225,8 @@ class Pod6::Block::SEMANTIC is Pod6::Block {
     }
 
     multi method gist(Pod6::Block::SEMANTIC:D:) {
-        my $gist = "Pod6::Block::SEMANTIC $!name\n";
-        $gist ~= self.gist-children();
+        my $gist = "Pod6::Block::SEMANTIC - $!name\n";
+        $gist ~= self.gist-children().indent(4);
         $gist.chomp;
     }
 }

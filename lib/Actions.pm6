@@ -32,35 +32,44 @@ class Pod6::Actions {
         my $typename := $<block_name>.ast;
         my $blockitems := nqp::list();
 
+        my $name = "";
+        $name = ~$_ with $<block_name><semantic_standard_name>;
+
         for $<contents> {
             next unless $_<block> || $_<pseudopara>;
             nqp::push($blockitems, $_<block> ?? $_<block>.ast !! $_<pseudopara>.ast);
         }
 
         if $<block_name><standard_name><level> -> $LVL {
-            make $M.add_constant($typename, 'type_new', |nqp::hllize($blockitems), :level(+~$LVL));
+            make $M.add_constant($typename, 'type_new', :$name, |nqp::hllize($blockitems), :level(+~$LVL));
         } else {
-            make $M.add_constant($typename, 'type_new', |nqp::hllize($blockitems));
+            make $M.add_constant($typename, 'type_new', :$name, |nqp::hllize($blockitems));
         }
     }
 
     method directive:sym<para>($/) {
         my $typename := $<block_name>.ast;
 
+        my $name = "";
+        $name = ~$_ with $<block_name><semantic_standard_name>;
+
         if $<block_name><standard_name><level> -> $LVL {
-            make $M.add_constant($typename, 'type_new', $<pseudopara>.ast, :level(+~$LVL));
+            make $M.add_constant($typename, 'type_new', :$name, $<pseudopara>.ast, :level(+~$LVL));
         } else {
-            make $M.add_constant($typename, 'type_new', $<pseudopara>.ast);
+            make $M.add_constant($typename, 'type_new', :$name, $<pseudopara>.ast);
         }
     }
 
     method directive:sym<abbr>($/) {
         my $typename := $<block_name>.ast;
 
+        my $name = "";
+        $name = ~$_ with $<block_name><semantic_standard_name>;
+
         if $<block_name><standard_name><level> -> $LVL {
-            make $M.add_constant($typename, 'type_new', $<pseudopara>.ast, :level(+~$LVL));
+            make $M.add_constant($typename, 'type_new', :$name, $<pseudopara>.ast, :level(+~$LVL));
         } else {
-            make $M.add_constant($typename, 'type_new', $<pseudopara>.ast);
+            make $M.add_constant($typename, 'type_new', :$name, $<pseudopara>.ast);
         }
     }
 
