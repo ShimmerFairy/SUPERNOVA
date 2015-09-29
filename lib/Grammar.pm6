@@ -30,8 +30,6 @@ class PodScope {
     has $!implied-para = False;
     has $!implied-code = False;
 
-    has $!locked-scope = False; # for things like =config, to avoid other rules changing stuff
-
     has %!config;
 
     has $!implied-para-mode = False;
@@ -56,18 +54,13 @@ class PodScope {
     method get-this-config(Str $key) { %!config<-THIS->{$key} }
     method get-config-for(Str $block, Str $key) { %!config{$block}{$key} }
 
-    method lock-scope   { $!locked-scope = True  }
-    method unlock-scope { $!locked-scope = False }
-
-    method blanks-stop-fc($a) { unless $!locked-scope { $!fc-blankstop = ?$a } }
+    method blanks-stop-fc($a) { $!fc-blankstop = ?$a }
     method fc-stop-at-blank   { $!fc-blankstop }
 
-    method disable-fc { unless $!locked-scope { $!fc-need-allow = True } }
+    method disable-fc { $!fc-need-allow = True }
     method allow-fc($fc) {
-        unless $!locked-scope {
-            die "wrong fc $fc" unless $fc ~~ "A".."Z";
-            @!fc-allowed.push($fc)
-        }
+        die "wrong fc $fc" unless $fc ~~ "A".."Z";
+        @!fc-allowed.push($fc)
     }
     method can-fc($fc) {
         if $!fc-need-allow || $!implied-code-mode {
@@ -77,29 +70,25 @@ class PodScope {
         }
     }
 
-    method imply-para { unless $!locked-scope { $!implied-para = True } }
-    method imply-code { unless $!locked-scope { $!implied-code = True } }
-    method unimply-para { unless $!locked-scope { $!implied-para = False } }
-    method unimply-code { unless $!locked-scope { $!implied-code = False } }
+    method imply-para   { $!implied-para = True }
+    method imply-code   { $!implied-code = True }
+    method unimply-para { $!implied-para = False }
+    method unimply-code { $!implied-code = False }
     method can-para { $!implied-para }
     method can-code { $!implied-code }
 
     multi method set-margin(Int $wsnum, :$code) {
-        unless $!locked-scope {
-            if $code {
-                $!imp-code-vmargin = $wsnum;
-            } else {
-                $!vmargin = $wsnum;
-            }
+        if $code {
+            $!imp-code-vmargin = $wsnum;
+        } else {
+            $!vmargin = $wsnum;
         }
     }
     multi method set-margin(Str $char, :$code) {
-        unless $!locked-scope {
-            if $code {
-                $!imp-code-vmargin = $char.substr(0, 1);
-            } else {
-                $!vmargin = $char.substr(0, 1);
-            }
+        if $code {
+            $!imp-code-vmargin = $char.substr(0, 1);
+        } else {
+            $!vmargin = $char.substr(0, 1);
         }
     }
     method margin-is-char(:$code) { $code ?? $!imp-code-vmargin ~~ Str !! $!vmargin ~~ Str }
@@ -195,16 +184,6 @@ grammar Pod6::Grammar does GramError {
 
     method exit_scope {
         nqp::pop(@*POD_SCOPES);
-        self;
-    }
-
-    method lock_scope {
-        @*POD_SCOPES[*-1].lock-scope();
-        self;
-    }
-
-    method unlock_scope {
-        @*POD_SCOPES[*-1].unlock-scope();
         self;
     }
 
@@ -312,12 +291,11 @@ grammar Pod6::Grammar does GramError {
     }
 
     multi token directive:sym<config> {
-        "=config" <.ws> #`(::) <.lock_scope>
+        "=config" <.ws> #`(::)
         $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
         <configset> <.end_line>
         <extra_config_line>*
         <.end_non_delim>
-        <.unlock_scope>
     }
 
     multi token directive:sym<end> {
