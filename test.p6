@@ -11,11 +11,13 @@ use Actions;
 my $*FILENAME = "<internal-test>";
 
 my $testpod = q:to/NOTPOD/;
-
     =begin pod :!autotoc
     =       :autotoc :imconfused :!ok
 
     =config L<> :okthen
+
+    =TITLE The First of May
+    =AUTHOR B, R & M Gibb
 
     Hello there L<ALL OK >
     Everybody

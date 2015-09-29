@@ -184,6 +184,8 @@ grammar Pod6::Grammar does GramError {
         <.blank_line> || $
     }
 
+    token end_non_delim { <.blank_or_eof> | <?before <.new_directive>> }
+
     # @*POD_SCOPES handlers
 
     method enter_scope {
@@ -242,7 +244,7 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<delim> {
         "=begin" <.ws> # XXX want :: here
             <block_name> <.ws>
-            <configset> <.end_line>
+            <configset>? <.end_line>
 
         <extra_config_line>*
 
@@ -265,7 +267,7 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<para> {
         "=for" <.ws> # XXX want :: here
             <block_name> <.ws>
-            <configset> <.end_line>
+            <configset>? <.end_line>
 
         <extra_config_line>*
 
@@ -273,7 +275,7 @@ grammar Pod6::Grammar does GramError {
 
         <.start_line> <pseudopara>
 
-        <.blank_or_eof>
+        <.end_non_delim>
     }
 
     multi token directive:sym<abbr> {
@@ -288,7 +290,7 @@ grammar Pod6::Grammar does GramError {
 
         [<.end_line> <.start_line>]? <pseudopara>
 
-        <.blank_or_eof>
+        <.end_non_delim>
     }
 
     multi token directive:sym<encoding> {
@@ -296,7 +298,7 @@ grammar Pod6::Grammar does GramError {
         $<encoding>=[\N+ <.end_line>
             [<!blank_or_eof> <.start_line> \N+ <.end_line>]*]
 
-        <.blank_or_eof>
+        <.end_non_delim>
 
         {$¢.worry(X::Pod6::Encoding, target-enc => ~$<encoding>)}
     }
@@ -306,7 +308,7 @@ grammar Pod6::Grammar does GramError {
         [<.end_line> {$¢.panic(X::Pod6::Alias, atype => "Contextual")}]?
 
         \N+ {$¢.sorry(X::Pod6::Alias, atype => "Macro")}
-        <.end_line> <.blank_or_eof>
+        <.end_line> <.end_non_delim>
     }
 
     multi token directive:sym<config> {
@@ -314,6 +316,7 @@ grammar Pod6::Grammar does GramError {
         $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
         <configset> <.end_line>
         <extra_config_line>*
+        <.end_non_delim>
         <.unlock_scope>
     }
 
@@ -479,7 +482,7 @@ grammar Pod6::Grammar does GramError {
         <.enter_para>
 
         <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
-        [<!blank_or_eof> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
+        [<!blank_or_eof> <.start_line> <!before <.new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
 
         <.exit_para>
     }
