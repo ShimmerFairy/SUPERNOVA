@@ -9,7 +9,7 @@ use nqp;
 # TOCORE Just a fake world, since trying to interface with the real one is too
 # much of a pain.
 class FakeWorld {
-    method add_constant($typename, 'type_new', *@args, *%conf) {
+    method add_constant($typename, 'type_new', **@args, *%conf) {
         ::($typename).new(|@args, |%conf);
     }
 }
@@ -24,7 +24,6 @@ class Pod6::Actions {
     }
 
     method block($/) {
-        say $<directive>.ast;
         make $<directive>.ast;
     }
 
@@ -129,102 +128,5 @@ class Pod6::Actions {
         } else {
             make $M.add_constant('Pod6::Text::Plain', 'type_new', ~$/);
         }
-    }
-
-    method fc_content($/) {
-        my $parts := nqp::list();
-
-        for $<one_token_text> {
-            nqp::push($parts, $_.ast);
-        }
-
-        make $parts;
-    }
-
-    method formatting_code:sym<D>($/) {
-        my $defterm := $<defined>.ast;
-
-        if $<synonym> {
-            my $syns := nqp::list();
-
-            for $<synonym> {
-                nqp::push($syns, $_.ast);
-            }
-
-            make $M.add_constant('Pod6::Text::FCode::D', 'type_new', $defterm, |nqp::hllize($syns));
-        } else {
-            make $M.add_constant('Pod6::Text::FCode::D', 'type_new', $defterm);
-        }
-    }
-
-    method formatting_code:sym<E>($/) {
-        my $ents := nqp::list();
-
-        for $<entity> {
-            # TO-CORE find val() instead
-            my $numeric := val(~$_);
-            if nqp::istype($numeric, Int) {
-                nqp::push($ents, nqp::chr($numeric.Int));
-            } else {
-                $numeric := nqp::codepointfromname(~$_);
-                if $numeric > -1 {
-                    nqp::push($ents, nqp::chr($numeric));
-                } else {
-                    # HTML5 entity non-support is intentional
-                    die "OH NOT GOOD {~$_}";
-                }
-            }
-        }
-
-        make $M.add_constant('Pod6::Text::FCode::E', 'type_new', |nqp::hllize($ents));
-    }
-
-    method formatting_code:sym<L>($/) {
-        my $url;
-        my $displaytext;
-
-        $displaytext := $<displayish>.ast;
-
-        if $<definite_link> {
-            $url := ~$<definite_link>;
-        } else {
-            $url := $displaytext.text;
-        }
-
-        make $M.add_constant('Pod6::Text::FCode::L', 'type_new', $displaytext, $url);
-    }
-
-    method formatting_code:sym<M>($/) {
-        my $typename := "Pod6::Text::FCode::M::{~$<typename>}";
-        my $contents := $<verbatim>.ast;
-
-        make $M.add_constant($typename, 'type_new', $contents);
-    }
-
-    method formatting_code:sym<X>($/) {
-        my $entries := nqp::hash();
-        my $displaytext;
-
-        $displaytext := $<displayish>.ast;
-
-        if $<entry> {
-            for $<entry> {
-                my $ekey := ~$_<fc_content>;
-                nqp::bindkey($entries, $ekey, nqp::list());
-                for $<subentry> {
-                    nqp::push(nqp::atkey($entries, $ekey), ~$_);
-                }
-            }
-        } else {
-            nqp::bindkey($entries, $displaytext.text, nqp::list());
-        }
-
-        make $M.add_constant('Pod6::Text::FCode::X', 'type_new', $displaytext, $entries);
-    }
-
-    method formatting_code:sym<normal>($/) {
-        my $typename := "Pod6::Text::FCode::{~$<which>}";
-
-        make $M.add_constant($typename, 'type_new', |$<fc_content>.ast);
     }
 }

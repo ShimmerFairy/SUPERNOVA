@@ -35,7 +35,7 @@ class PodScope {
     has %!config;
 
     has $!implied-para-mode = False;
-    has $!implied-code-mode = True;
+    has $!implied-code-mode = False;
     has $!imp-code-vmargin = 0;
 
     method enter-para { $!implied-code-mode || !$!implied-para ?? False !! ($!implied-para-mode = True) }
@@ -497,126 +497,7 @@ grammar Pod6::Grammar does GramError {
         [<!formatting_code> \N]+ | <formatting_code>
     }
 
-    token fc_content {
-        :my $in-to-close := shim-unbox_i(0);
-
-        [
-        | $*OPENSTR [ $*OPENCHAR+ {$¢.panic(X::Pod6::FCode::TooManyAngles)} ]?
-          { $in-to-close := nqp::add_i($in-to-close, 1) }
-        | <?{$in-to-close > 0}> $*CLOSESTR { $in-to-close := nqp::sub_i($in-to-close, 1) }
-        | <.end_line>
-          [
-          | [
-            | <.new_directive>
-            | <?{@*POD_SCOPES[*-1].fc-stop-at-blank()}> <?blank_line>
-            ]
-            <.worry(X::Pod6::FCode::ForcedStop)>
-            { $in-to-close := shim-unbox_i(0) }
-          | <.start_line> <one_token_text>
-          ]
-        | <!before $*CLOSESTR | @*SUB_STOP> <one_token_text>
-        ]+
-    }
-
-    proto token formatting_code {*}
-
-    multi token formatting_code:sym<D> {
-        <sym> <?{@*POD_SCOPES[*-1].allow-fc("D")}>
-
-        :my $*OPENCHAR;
-        :my $*OPENSTR;
-        :my $*CLOSESTR;
-        :my @*SUB_STOP := ['|'];
-
-        <.open_fc>
-
-        <defined=.fc_content> ['|' {$*SUB_STOP := [';']} <synonym=.fc_content> +% ';']?
-
-        <.close_fc>
-    }
-
-    multi token formatting_code:sym<E> {
-        <sym> <?{@*POD_SCOPES[*-1].allow-fc("E")}>
-
-        :my $*OPENCHAR;
-        :my $*OPENSTR;
-        :my $*CLOSESTR;
-        :my @*SUB_STOP := [';'];
-
-        <.open_fc>
-
-        <entity=.fc_content> +% ';'
-
-        <.close_fc>
-    }
-
-    multi token formatting_code:sym<L> {
-        <sym> <?{@*POD_SCOPES[*-1].allow-fc("L")}>
-
-        :my $*OPENCHAR;
-        :my $*OPENSTR;
-        :my $*CLOSESTR;
-        :my @*SUB_STOP := ['|'];
-
-        <.open_fc>
-
-        <displayish=.fc_content> ['|' {@*SUB_STOP := []} <definite_link=.fc_content>]
-    }
-
-    multi token formatting_code:sym<M> {
-        <sym> <?{@*POD_SCOPES[*-1].allow-fc("M")}>
-
-        :my $*OPENCHAR;
-        :my $*OPENSTR;
-        :my $*CLOSESTR;
-        :my @*SUB_STOP;
-
-        <.open_fc>
-
-        <typename=.p6ident> \: <verbatim=.fc_content>
-
-        <.close_fc>
-    }
-
-    multi token formatting_code:sym<X> {
-        <sym> <?{@*POD_SCOPES[*-1].allow-fc("X")}>
-
-        :my $*OPENCHAR;
-        :my $*OPENSTR;
-        :my $*CLOSESTR;
-        :my @*SUB_STOP := ['|'];
-
-        <.open_fc>
-
-        <displayish=.fc_content>
-        [ '|' {@*SUB_STOP := [',',';']}
-          [ $<entry>=(<fc_content> [',' <subentry=.fc_content>]*) ] +% ';'
-        ]?
-
-        <.close_fc>
-    }
-
-    multi token formatting_code:sym<normal> {
-       $<which>=[<[ABCIKNPRSTUVZ]>] <?{@*POD_SCOPES[*-1].allow-fc(~$<which>)}>
-
-        :my $*OPENCHAR;
-        :my $*OPENSTR;
-        :my $*CLOSESTR;
-        :my @*SUB_STOP;
-
-        <.open_fc>
-
-        <fc_content>
-
-        <.close_fc>
-    }
-
-    token open_fc {
-        | ('<'+) { $*OPENSTR := ~$0; $*OPENCHAR := '<'; $*CLOSESTR := '>' x nqp::chars($*OPENSTR) }
-        | ('«'+) { $*OPENSTR := ~$0; $*OPENCHAR := '«'; $*CLOSESTR := '»' x nqp::chars($*OPENSTR) }
-    }
-
-    token close_fc { $*CLOSESTR }
+    token formatting_code { <!> }
 
     # TO-CORE use the actual rule instead of p6ident, the version that doesn't
     # allow ::
