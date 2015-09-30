@@ -21,91 +21,20 @@ use GrammarError;
 
 #use Grammar::Tracer;
 
-# TO-CORE nqp-ify class
-class PodScope {
-    has $!fc-need-allow = False;
-    has @!fc-allowed;
-    has $!fc-blankstop = True;
-    has $!vmargin = 0;
-    has $!implied-para = False;
-    has $!implied-code = False;
-
-    has %!config;
-
-    has $!implied-para-mode = False;
-    has $!implied-code-mode = False;
-    has $!imp-code-vmargin = 0;
-
-    method enter-para { $!implied-code-mode || !$!implied-para ?? False !! ($!implied-para-mode = True) }
-    method exit-para  { $!implied-para-mode = False }
-    method enter-code { $!implied-para-mode || !$!implied-code ?? False !! ($!implied-code-mode = True) }
-    method exit-code  { $!implied-code-mode = False }
-
-    method set-this-config(Str $key, Str $value) {
-        # make sure the key used here isn't a valid P6 identifier, to avoid any
-        # conflicts with block names
-        %!config<-THIS->{$key} = $value;
-    }
-
-    method set-config-for(Str $block, Str $key, Str $value) {
-        %!config{$block}{$key} = $value;
-    }
-
-    method get-this-config(Str $key) { %!config<-THIS->{$key} }
-    method get-config-for(Str $block, Str $key) { %!config{$block}{$key} }
-
-    method blanks-stop-fc($a) { $!fc-blankstop = ?$a }
-    method fc-stop-at-blank   { $!fc-blankstop }
-
-    method disable-fc { $!fc-need-allow = True }
-    method allow-fc($fc) {
-        die "wrong fc $fc" unless $fc ~~ "A".."Z";
-        @!fc-allowed.push($fc)
-    }
-    method can-fc($fc) {
-        if $!fc-need-allow || $!implied-code-mode {
-            $fc ~~ @!fc-allowed;
-        } else {
-            $fc ~~ "A".."Z"
-        }
-    }
-
-    method imply-para   { $!implied-para = True }
-    method imply-code   { $!implied-code = True }
-    method unimply-para { $!implied-para = False }
-    method unimply-code { $!implied-code = False }
-    method can-para { $!implied-para }
-    method can-code { $!implied-code }
-
-    multi method set-margin(Int $wsnum, :$code) {
-        if $code {
-            $!imp-code-vmargin = $wsnum;
-        } else {
-            $!vmargin = $wsnum;
-        }
-    }
-    multi method set-margin(Str $char, :$code) {
-        if $code {
-            $!imp-code-vmargin = $char.substr(0, 1);
-        } else {
-            $!vmargin = $char.substr(0, 1);
-        }
-    }
-    method margin-is-char(:$code) { $code ?? $!imp-code-vmargin ~~ Str !! $!vmargin ~~ Str }
-    method margin-is-size(:$code) { $code ?? $!imp-code-vmargin ~~ Int !! $!vmargin ~~ Int }
-    method get-margin(:$code) { $code ?? $!imp-code-vmargin !! $!vmargin }
-}
-
 grammar Pod6::Grammar does GramError {
     token TOP {
-        :my @*POD_SCOPES := nqp::list();
+        :my @*POD_BLOCKS := nqp::list();
 
         :my $*LAST_BEGIN;
+
+        :my $*VMARGIN;
 
         # TO-CORE stuff we won't need
         :my @*WORRIES;
         :my @*SORROWS;
         :my $*SORRY_LIMIT := 10;
+
+        <.start_document>
 
         <.blank_line>*
         [<block>
@@ -116,6 +45,8 @@ grammar Pod6::Grammar does GramError {
         <.cry-sorrows>
         <.express-worries>
     }
+
+    token start_document { <?> }
 
     # XXX if this grammar is not kept independent in the move to core, this rule
     # has to be renamed
@@ -142,23 +73,22 @@ grammar Pod6::Grammar does GramError {
     }
 
     method prime_line($margin) {
-        my $size = numify-margin($margin);
-        @*POD_SCOPES[*-1].set-margin($size);
+        $*VMARGIN = numify-margin($margin);
         self;
     }
 
     method prime_code_line($margin) {
         my $size = numify-margin($margin);
-        @*POD_SCOPES[*-1].set-margin($size, :code);
+        @*POD_BLOCKS[*-1].set-cvmargin($size);
         self;
     }
 
     token start_line {
-        ^^ " " ** { @*POD_SCOPES[*-1].get-margin() }
+        ^^ " " ** { @*POD_BLOCKS[*-1].get-margin() }
     }
 
-    token up_to_code { # for handling the extra indentation on implied code lines
-        " " ** { @*POD_SCOPES[*-1].get-margin(:code) }
+    token start_code_line {
+        ^^ " " ** { @*POD_BLOCKS[*-1].get-margin() + @*POD_BLOCKS[*-1].get-code-margin() }
     }
 
     token end_line {
@@ -175,47 +105,18 @@ grammar Pod6::Grammar does GramError {
 
     token end_non_delim { <.blank_or_eof> | <?before <.new_directive>> }
 
-    # @*POD_SCOPES handlers
+    token new_block { <?> }
 
-    method enter_scope {
-        nqp::push(@*POD_SCOPES, PodScope.new);
-        self;
-    }
-
-    method exit_scope {
-        nqp::pop(@*POD_SCOPES);
-        self;
-    }
-
-    method enter_para {
-        @*POD_SCOPES[*-1].enter-para();
-        self;
-    }
-
-    method enter_code {
-        @*POD_SCOPES[*-1].enter-code();
-        self;
-    }
-
-    method exit_para {
-        @*POD_SCOPES[*-1].exit-para();
-        self;
-    }
-
-    method exit_code {
-        @*POD_SCOPES[*-1].exit-code();
-        self;
-    }
+    token parent_block { <?> }
 
     # high-level block handling
 
     token block {
         ^^ $<litmargin>=(\h*) <?before <new_directive>>
-        <.enter_scope>
         {self.prime_line(~$<litmargin>)}
 
         <directive>
-        <.exit_scope>
+#        <.parent_block>
     }
 
     proto token directive {*}
@@ -223,11 +124,9 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<delim> {
         "=begin" <.ws> # XXX want :: here
             <block_name> <.ws>
-            <configset>? <.end_line>
+            :my $*BLOCK_NAME; {$*BLOCK_NAME := $<block_name>} <.new_block>
 
-        <extra_config_line>*
-
-        {@*POD_SCOPES[*-1].blanks-stop-fc(0)}
+        <.block_config>
 
         $<contents>=( <!before \h* "=end">
           [
@@ -246,11 +145,9 @@ grammar Pod6::Grammar does GramError {
     multi token directive:sym<para> {
         "=for" <.ws> # XXX want :: here
             <block_name> <.ws>
-            <configset>? <.end_line>
+            :my $*BLOCK_NAME; {$*BLOCK_NAME := $<block_name>} <.new_block>
 
-        <extra_config_line>*
-
-        {@*POD_SCOPES[*-1].blanks-stop-fc(1)}
+        <.block_config>
 
         <.start_line> <pseudopara>
 
@@ -259,8 +156,7 @@ grammar Pod6::Grammar does GramError {
 
     multi token directive:sym<abbr> {
         \= <!not_name> <block_name> <.ws>
-
-        {@*POD_SCOPES[*-1].blanks-stop-fc(1)}
+            :my $*BLOCK_NAME; {$*BLOCK_NAME := $<block_name>} <.new_block>
 
         # implied code blocks can only start on the next line, since only there
         # can we check for indentation. However, since we eat up all the
@@ -273,7 +169,8 @@ grammar Pod6::Grammar does GramError {
     }
 
     multi token directive:sym<encoding> {
-        "=encoding" <.ws> # ::
+        "=encoding" <.ws> #`(::)
+        :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("encoding")} <.new_block>
         $<encoding>=[\N+ <.end_line>
             [<!blank_or_eof> <.start_line> \N+ <.end_line>]*]
 
@@ -284,6 +181,7 @@ grammar Pod6::Grammar does GramError {
 
     multi token directive:sym<alias> {
         "=alias" <.ws> $<AVal=.p6ident> <.ws>
+        :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("alias")} <.new_block>
         [<.end_line> {$¢.panic(X::Pod6::Alias, atype => "Contextual")}]?
 
         \N+ {$¢.sorry(X::Pod6::Alias, atype => "Macro")}
@@ -292,6 +190,7 @@ grammar Pod6::Grammar does GramError {
 
     multi token directive:sym<config> {
         "=config" <.ws> #`(::)
+        :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("config")} <.new_block>
         $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
         <configset> <.end_line>
         <extra_config_line>*
@@ -317,25 +216,25 @@ grammar Pod6::Grammar does GramError {
     }
 
     token standard_name {
-        | code                                       { @*POD_SCOPES[*-1].imply-code() } { @*POD_SCOPES[*-1].disable-fc() }
+        | code
         | comment
         | data
-        | defn    { @*POD_SCOPES[*-1].imply-para() }
-        | finish  { @*POD_SCOPES[*-1].imply-para() }
+        | defn
+        | finish
         | head $<level>=[\d+]
         | input $<level>=[\d+]?
-        | item    { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
-        | nested  { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
+        | item
+        | nested
         | output
         | para
-        | pod     { @*POD_SCOPES[*-1].imply-para() } { @*POD_SCOPES[*-1].imply-code() }
+        | pod
         | table
     }
 
     # since S26 states that each name and its plural is reserved, I decided to
-    # pluralize even those that don't have a grammatical plural :P
+    # pluralize even those that don't have a grammatical plural :P . (Remember
+    # that NAMES? means NAME[S?], as one alternative spelling.)
     token semantic_standard_name {
-        [
         | NAMES?
         | AUTHORS?
         | VERSIONS?
@@ -368,7 +267,6 @@ grammar Pod6::Grammar does GramError {
         | IND[EX|ICES]
         | FOREWORDS?
         | SUMMAR[Y|IES]
-        ] { @*POD_SCOPES[*-1].imply-para(); @*POD_SCOPES[*-1].imply-code() }
     }
 
     token not_name {
@@ -387,6 +285,11 @@ grammar Pod6::Grammar does GramError {
         <!{ ~$<p6ident> eq (~$<p6ident>).uc || ~$<p6ident> eq (~$<p6ident>).lc }>
     }
 
+    token block_config {
+        <configset>? <.end_line>
+        <extra_config_line>*
+    }
+
     proto token config_option {*}
 
     multi token config_option:sym<colonpair> {
@@ -394,17 +297,17 @@ grammar Pod6::Grammar does GramError {
         [
         | $<neg>=['!'] <key=.p6ident>
         | <?[$@%&]> <.panic(X::Pod6::BadConfig, message => "Attempted to use variable as colonpair; only constants are allowed in Pod configuration")>
-        | <key=.p6ident> $<value>=['(' ~ ')' [<podint>|<podstr>] | <cgroup>]?
+        | <key=.p6ident> [$<value>=['(' ~ ')' [<podint>|<podstr>] | <cgroup>]]?
         ]
     }
 
     multi token config_option:sym<fatarrow> {
-        <key=.p6ident> <.ws> '=>' <.ws> [<cgroup>|<podint>|<podstr>]
+        <key=.p6ident> <.ws> '=>' <.ws> $<value>=[<cgroup>|<podint>|<podstr>]
     }
 
     token cgroup {
         | '[' ~ ']' [$<sbitem>=(<podint>|<podstr>) +% [<.ws> ',' <.ws>]]
-        | '<' ~ '>' [$<qwitem>=([<![>]> <!ws> .]+) +% <.ws>]
+        | '<' ~ '>' [$<qwitem>=([<![>]> \S]+) +% <.ws>]
         | '{' ~ '}' [$<cbitem>=(<config_option>) +% [<.ws> ',' <.ws>]]
     }
 
@@ -412,8 +315,8 @@ grammar Pod6::Grammar does GramError {
     # kind of Q lang (though variable interpolation is disallowed)
     token podint { \d+ }
     token podstr {
-        | \' ~ \' [<-[\'\\]> | \\\\ | \\\']+
-        | \" ~ \" [<-[\"\\]> | \\\\ | \\\"]+
+        | \' ~ \' (<-[\'\\]> | \\\\ | \\\')+
+        | \" ~ \" (<-[\"\\]> | \\\\ | \\\")+
     }
 
     # this token lives to produce an error. Do not call unless/until you know
@@ -441,34 +344,33 @@ grammar Pod6::Grammar does GramError {
 
     proto token pseudopara {*}
     multi token pseudopara:sym<implicit_code> {
-        <?{@*POD_SCOPES[*-1].can-code()}> (\h+) # probably want ::
+        <?{@*POD_BLOCKS[*-1].implies-code()}> (\h+) # probably want ::
 
-        <.enter_code>
         {self.prime_code_line(~$0)}
 
-        <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
-        [<!blank_or_eof> <.start_line> <.up_to_code> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
-        <.exit_code>
+
+        <!before <.end_non_delim>> $<line>=(<one_token_text>+ <end_line>)
+        [<!before <.end_non_delim>> <.start_code_line> $<line>=(<one_token_text>+ <end_line>)]*
     }
 
     multi token pseudopara:sym<implicit_para> {
-        <?{@*POD_SCOPES[*-1].can-para()}> # probably want ::
+        <?{@*POD_BLOCKS[*-1].implies-para()}>
 
         # we can accept indented stuff, _if_ code blocks can't be implicit here
-        [<!{@*POD_SCOPES[*-1].can-code()}> \h*]?
+        [<!{@*POD_BLOCKS[*-1].implies-code()}> \h* | <!before \h>]
 
-        <.enter_para>
+        # probably want ::
 
-        <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
-        [<!blank_or_eof> <.start_line> <!before <.new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
-
-        <.exit_para>
+        <!before <.end_non_delim>> $<line>=(<one_token_text>+ <end_line>)
+        [<!before <.end_non_delim>> <.start_line> $<line>=(<one_token_text>+ <end_line>)]*
     }
 
     multi token pseudopara:sym<nothing_implied> {
-        <!{@*POD_SCOPES[*-1].can-code() || @*POD_SCOPES[*-1].can-para()}> # probably not needed when :: used on the other multis
-        <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)
-        [<!blank_or_eof> <.start_line> <!before <new_directive>> $<line>=(<one_token_text>+ <.end_line>)]*
+        # probably not needed when :: used on the other multis
+        <!{@*POD_BLOCKS[*-1].implies-code() || @*POD_BLOCKS[*-1].implies-para()}>
+
+        <!before <.end_non_delim>> $<line>=(<one_token_text>+ <end_line>)
+        [<!before <.end_non_delim>> <.start_line> $<line>=(<one_token_text>+ <end_line>)]*
     }
 
     token one_token_text {

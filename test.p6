@@ -12,7 +12,7 @@ my $*FILENAME = "<internal-test>";
 
 my $testpod = q:to/NOTPOD/;
     =begin pod :!autotoc
-    =       :autotoc :imconfused :!ok
+    =       :autotoc<a b> :imconfused :!ok
 
     =config L<> :okthen
 
@@ -37,8 +37,10 @@ my $testpod = q:to/NOTPOD/;
 
     =end pod
 
+    =config head1 :like<head73>
+
     =encoding aosdf aoish ao
     sdifao sodk
 NOTPOD
 
-say Pod6::Grammar.parse($testpod, :actions(Pod6::Actions)).ast».gist.join("\n");
+say Pod6::Grammar.parse($testpod, :actions(Pod6::Actions)).ast;
