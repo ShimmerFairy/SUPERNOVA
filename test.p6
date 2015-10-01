@@ -17,7 +17,10 @@ my $testpod = q:to/NOTPOD/;
     =config L<> :okthen
 
     =TITLE The First of May
+
     =AUTHOR B, R & M Gibb
+
+    =config R<> :abcd
 
     Hello there L<ALL OK >
     Everybody
@@ -29,6 +32,10 @@ my $testpod = q:to/NOTPOD/;
         HELLO SAILOR
 
     =encoding iso8859-1
+
+    =config code :allow<B I>
+
+        And now some code B<here> and I<here>.
 
     V<>=alias FOOBAR quuxy
 

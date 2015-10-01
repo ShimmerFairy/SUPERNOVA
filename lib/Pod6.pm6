@@ -20,22 +20,7 @@ class Pod6::Excerpt does Associative {
 
         if %!config {
             $gist ~= "Configuration:\n".indent(2);
-            for %!config {
-                $gist ~= ($_.key ~ " => ").indent(4);
-
-                if $_.value ~~ Associative {
-                    $gist ~= "\{\n";
-                    for $_.value<> {
-                        $gist ~= ($_.key ~ " => " ~ $_.value).indent(6);
-                        $gist ~= "\n";
-                    }
-                    $gist ~= "}".indent(4);
-                } else {
-                    $gist ~= $_.value;
-                }
-
-                $gist ~= "\n";
-            }
+            $gist ~= self.gist-config.indent(4) ~ "\n";
         }
 
         if self.gist-children {
@@ -54,6 +39,26 @@ class Pod6::Excerpt does Associative {
     }
 
     method gist-children { "" }
+
+    method gist-config(Pod6::Excerpt:D:) {
+        sub one-level(%h) {
+            my $gist;
+            for %h.kv -> $k, $v {
+                $gist ~= "$k => ";
+
+                if $v ~~ Associative {
+                    $gist ~= "\{\n";
+                    $gist ~= one-level($v).indent(2);
+                    $gist ~= "}\n";
+                } else {
+                    $gist ~= $v.gist ~ "\n";
+                }
+            }
+            $gist
+        }
+
+        one-level(%!config).chomp;
+    }
 }
 
 #| a role for Pod6 classes having children
@@ -94,6 +99,8 @@ class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
     method text { [~] @!children }
 }
 
+class Pod6::Config { ... }
+
 #| base class for blocks
 class Pod6::Block is Pod6::Excerpt does Pod6::Children {
     # these are numeric margins; character margins are in the config options
@@ -114,6 +121,8 @@ class Pod6::Block is Pod6::Excerpt does Pod6::Children {
     method get-margin { $!vmargin }
     method get-para-margin { self.get-margin() } # XXX will differ with :margin support
     method get-code-margin { $!cvmargin }
+
+    method last-config-block { self.list.grep(* ~~ Pod6::Config)[*-1] }
 }
 
 class Pod6::Block::Code is Pod6::Block { }

@@ -33,9 +33,7 @@ class Pod6::Actions {
             if $*BLOCK_NAME eq 'config' {
                 nqp::push(@*POD_BLOCKS, $M.add_constant('Pod6::Config', 'type_new'));
 
-                my $prevconfig = @*POD_BLOCKS[*-2].list.grep(* ~~ Pod6::Config)[*-1];
-
-                @*POD_BLOCKS[*-1].inherit-config($prevconfig);
+                @*POD_BLOCKS[*-1].inherit-config(@*POD_BLOCKS[*-2].last-config-block);
 
                 # for extra config lines
                 @*POD_BLOCKS[*-1].set-vmargin($*VMARGIN);
@@ -59,60 +57,45 @@ class Pod6::Actions {
             # set the vmargin for this block
             @*POD_BLOCKS[*-1].set-vmargin($*VMARGIN);
 
-            # next, we find the latest =config block, and clone it as the first
-            # child of this new block (we only search within the eventual parent
-            # block, because it's guaranteed to have one)
+            # next up, figure out the name for which to find configuration, and
+            # push the last =config as the first child of this block.
 
             my $confname = $sname ?? $sname !!
                            $*BLOCK_NAME<standard_name> ?? ~$*BLOCK_NAME<standard_name> !!
                            ~$*BLOCK_NAME<typename>;
 
-            my $config = @*POD_BLOCKS[*-2].list.grep(* ~~ Pod6::Config)[*-1];
-
-            @*POD_BLOCKS[*-1].push($config);
+            @*POD_BLOCKS[*-1].push(@*POD_BLOCKS[*-2].last-config-block);
 
             # finally, apply any relevant configuration options to this block.
 
-            my $opts := $config.grab-config-for($confname);
+            my $opts := @*POD_BLOCKS[*-2].last-config-block.grab-config-for($confname);
 
             @*POD_BLOCKS[*-1].set-config($opts);
         }
     }
 
-#    method parent_block($/) {
-#        my $child = nqp::pop(@*POD_BLOCKS);
-#        @*POD_BLOCKS[*-1].push($child);
-#    }
+    method parent_block($/) {
+        my $child = nqp::pop(@*POD_BLOCKS);
+        @*POD_BLOCKS[*-1].push($child);
+    }
 
     method TOP($/) {
-        @*POD_BLOCKS[*-1].push(nqp::hllize($_.ast)) for $<block>;
         die +@*POD_BLOCKS unless +@*POD_BLOCKS == 1;
         make @*POD_BLOCKS[0];
     }
 
-    method block($/) {
-        make nqp::pop(@*POD_BLOCKS);
-    }
+    method block($/) { }
 
-    method directive:sym<delim>($/) {
-        my $blockitems := nqp::list();
+    method directive:sym<delim>($/) { }
 
-        for $<contents> {
-            next unless $_<block> || $_<pseudopara>;
-            nqp::push($blockitems, $_<block> ?? $_<block>.ast !! $_<pseudopara>.ast);
-        }
- 
-        @*POD_BLOCKS[*-1].push(nqp::hllize($blockitems));
-    }
+    method directive:sym<para>($/) { }
 
-    method directive:sym<para>($/) { @*POD_BLOCKS[*-1].push($<pseudopara>.ast); }
+    method directive:sym<abbr>($/) { }
 
-    method directive:sym<abbr>($/) { @*POD_BLOCKS[*-1].push($<pseudopara>.ast); }
+    method directive:sym<encoding>($/) { }
+    method directive:sym<alias>($/) { }
 
-    method directive:sym<encoding>($/) { }#@*POD_BLOCKS[*-1].push(Pod6::Text::Plain.new("N ENC")) }
-    method directive:sym<alias>($/) { }#@*POD_BLOCKS[*-1].push(Pod6::Text::Plain.new("N ALI")) }
-
-    method directive:sym<config>($/)   {
+    method directive:sym<config>($/) {
         my $options := $<configset>.ast;
 
 # XXX TOCORE 'make' hllizes stuff in P6, so this code doesn't work in P6.
@@ -171,19 +154,21 @@ class Pod6::Actions {
         # TOCORE should be @lines
         my $lines := collect-lines($/);
 
-        make $M.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($lines));
+        @*POD_BLOCKS[*-1].push($M.add_constant('Pod6::Block::Code', 'type_new', @*POD_BLOCKS[*-1].last-config-block, |nqp::hllize($lines)));
+        @*POD_BLOCKS[*-1].set-config(@*POD_BLOCKS[*-1].last-config-block.grab-config-for('code'));
     }
 
     method pseudopara:sym<implicit_para>($/) {
         my $parts := depreserve-text(collect-lines($/));
 
-        make $M.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($parts));
+        @*POD_BLOCKS[*-1].push($M.add_constant('Pod6::Block::Para', 'type_new', @*POD_BLOCKS[*-1].last-config-block, |nqp::hllize($parts)));
+        @*POD_BLOCKS[*-1].set-config(@*POD_BLOCKS[*-1].last-config-block.grab-config-for('para'));
     }
 
     method pseudopara:sym<nothing_implied>($/) {
         my $lines := collect-lines($/);
 
-        make $lines;
+        @*POD_BLOCKS[*-1].push($lines);
     }
 
     method one_token_text($/) {

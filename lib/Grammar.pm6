@@ -116,7 +116,7 @@ grammar Pod6::Grammar does GramError {
         {self.prime_line(~$<litmargin>)}
 
         <directive>
-#        <.parent_block>
+        <.parent_block>
     }
 
     proto token directive {*}
