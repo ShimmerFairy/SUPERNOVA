@@ -99,6 +99,9 @@ class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
     method text { [~] @!children }
 }
 
+#| base role for formatting codes
+role Pod6::Text::FCode is Pod6::Text { }
+
 class Pod6::Config { ... }
 
 #| base class for blocks
@@ -123,6 +126,10 @@ class Pod6::Block is Pod6::Excerpt does Pod6::Children {
     method get-code-margin { $!cvmargin }
 
     method last-config-block { self.list.grep(* ~~ Pod6::Config)[*-1] }
+
+    #| gets the contents of the block as plaintext. Meant for "bottom" blocks
+    #| (which only contain text, and not other blocks), but works on all blocks.
+    method text { [~] @!children».text }
 }
 
 class Pod6::Block::Code is Pod6::Block { }
@@ -223,6 +230,9 @@ class Pod6::Config is Pod6::Excerpt {
 
     has $.get-margin;
     method set-vmargin($a) { $!get-margin = $a }
+
+    # for Pod6::Block.text
+    method text { "" }
 }
 
 #| The document class. The base container for every Pod construct in a file.

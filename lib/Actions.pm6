@@ -168,7 +168,7 @@ class Pod6::Actions {
     method pseudopara:sym<nothing_implied>($/) {
         my $lines := collect-lines($/);
 
-        @*POD_BLOCKS[*-1].push($lines);
+        @*POD_BLOCKS[*-1].push(nqp::hllize($lines));
     }
 
     method one_token_text($/) {

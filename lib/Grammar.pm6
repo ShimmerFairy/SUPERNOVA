@@ -221,9 +221,9 @@ grammar Pod6::Grammar does GramError {
         | data
         | defn
         | finish
-        | head $<level>=[\d+]
-        | input $<level>=[\d+]?
-        | item
+        | <(head)> $<level>=[\d+]
+        | input
+        | <(item)> $<level>=[\d+]?
         | nested
         | output
         | para
@@ -397,7 +397,7 @@ grammar Pod6::Grammar does GramError {
                  [
                    [begin|for|end] \h+
                  ]?
-                 [<reserved_name> | <typename>]
+                 [<standard_name> | <semantic_standard_name> | <typename>]
                ]
     }
 }
