@@ -278,7 +278,13 @@ grammar Pod6::Grammar does GramError {
         | encoding
     }
 
-    token reserved_name { [<:Lower>+ | <:Upper>+] <!ww> }
+    token reserved_name {
+        [
+        | [<:Lower>|_] [<['-]>? [<:Lower>|_|\d]]*
+        | [<:Upper>|_] [<['-]>? [<:Upper>|_|\d]]+
+        ]
+        <!ww>
+    }
 
     token typename {
         <p6ident>
@@ -397,7 +403,7 @@ grammar Pod6::Grammar does GramError {
                  [
                    [begin|for|end] \h+
                  ]?
-                 [<standard_name> | <semantic_standard_name> | <typename>]
+                 [<reserved_name> | <typename>]
                ]
     }
 }

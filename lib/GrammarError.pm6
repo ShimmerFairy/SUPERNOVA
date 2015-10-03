@@ -120,7 +120,7 @@ role GramError {
     }
 
     method make-ex($/, Exception $type, %opts is copy) {
-        my $linecol := self.linecol(shim-unbox_s($/.orig), shim-unbox_i($/.from));
+        my $linecol := self.linecol(shim-unbox_s($/.orig), shim-unbox_i($/.CURSOR.pos));
 
         my $fled-line := self.takeline(shim-unbox_s($/.orig), nqp::atpos_i($linecol, 0));
 
