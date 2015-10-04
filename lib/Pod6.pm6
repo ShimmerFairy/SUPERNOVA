@@ -120,6 +120,8 @@ class Pod6::Block is Pod6::Excerpt does Pod6::Children {
     method implies-code { False }
     method implies-para { False }
 
+    method preserves-spaces { False }
+
     method set-vmargin(UInt $spaces = 0)  { $!vmargin  = $spaces }
     method set-cvmargin(UInt $spaces = 0) { $!cvmargin = $spaces }
 
@@ -135,8 +137,11 @@ class Pod6::Block is Pod6::Excerpt does Pod6::Children {
     method text { [~] @!children».text }
 }
 
-class Pod6::Block::Code is Pod6::Block { }
+class Pod6::Block::Code is Pod6::Block {
+    method preserves-spaces { True }
+}
 class Pod6::Block::Comment is Pod6::Block { }
+
 class Pod6::Block::Defn is Pod6::Block {
     method implies-code { True }
     method implies-para { True }
@@ -150,7 +155,9 @@ class Pod6::Block::Head is Pod6::Block {
     }
 }
 
-class Pod6::Block::Input is Pod6::Block { }
+class Pod6::Block::Input is Pod6::Block {
+    method preserves-spaces { True }
+}
 
 class Pod6::Block::Item is Pod6::Block {
     has $.level;
@@ -167,14 +174,23 @@ class Pod6::Block::Nested is Pod6::Block {
     method implies-code { True }
     method implies-para { True }
 }
-class Pod6::Block::Output is Pod6::Block { }
+
+class Pod6::Block::Output is Pod6::Block {
+    method preserves-spaces { True }
+}
+
 class Pod6::Block::Para is Pod6::Block { }
+
 class Pod6::Block::Pod is Pod6::Block {
     method implies-code { True }
     method implies-para { True }
 }
 class Pod6::Block::Table is Pod6::Block { } # XXX replace with actual table class
-class Pod6::Block::Data is Pod6::Block { }
+
+class Pod6::Block::Data is Pod6::Block {
+    method preserves-spaces { True }
+}
+
 class Pod6::Block::Finish is Pod6::Block {
     method implies-code { True }
     method implies-para { True }

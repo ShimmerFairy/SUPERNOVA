@@ -13,6 +13,8 @@ class FakeWorld {
         my \a = ::($typename).new(|@args, |%conf);
         a;
     }
+
+    method find_symbol(@typename) { ::([~] @typename) }
 }
 
 # TOCORE every |nqp::hllize(...) should be just |...
@@ -152,15 +154,52 @@ class Pod6::Actions {
             if nqp::istype($lines[*-1], Pod6::Text::Plain) {
                 $lines[*-1].append(~$_<end_line>);
             } else {
-                nqp::push($lines, Pod6::Text::Plain.new(~$_<end_line>));
+                nqp::push($lines, $M.add_constant('Pod6::Text::Plain', 'type_new', ~$_<end_line>));
             }
         }
 
         $lines
     }
 
-    # XXX implement space de-preservation
-    sub depreserve-text($lines) { $lines }
+    # normalizes all spans of spaces to one U+0020 character. Yes, even if the
+    # span is just one character that's not a space character (so NBSP users
+    # will need S<> or such to keep it, for example). I've decided to not worry
+    # about maintaing correct space characters for now, since that seems to
+    # count under not preserving spaces.
+    sub depreserve-text($parts) {
+        my $newparts := nqp::list();
+
+        for $parts.list -> $PART {
+            my $newtext := nqp::unbox_s($PART.text);
+            my $ws-start;
+            my $ws-end;
+
+            $ws-start := nqp::findcclass(nqp::const::CCLASS_WHITESPACE, $newtext,
+                                         0, nqp::chars($newtext));
+
+            while $ws-start < nqp::chars($newtext) {
+                $ws-end := nqp::findnotcclass(nqp::const::CCLASS_WHITESPACE, $newtext,
+                                              $ws-start, nqp::chars($newtext) - $ws-start);
+
+                # do a trim if it's whitespace at the start or end of the
+                # collection, otherwise replace with a single space
+                if nqp::elems($newparts) == 0                && $ws-start == 0 ||
+                   nqp::elems($newparts) + 1 == $parts.elems && $ws-end == nqp::chars($newtext) {
+                    $newtext := nqp::replace($newtext, $ws-start, $ws-end - $ws-start, "");
+                } else {
+                    $newtext := nqp::replace($newtext, $ws-start, $ws-end - $ws-start, " ");
+                }
+
+                $ws-start := nqp::findcclass(nqp::const::CCLASS_WHITESPACE, $newtext,
+                                             $ws-start + 1, nqp::chars($newtext) - $ws-start - 1);
+            }
+
+            nqp::push($newparts, $M.add_constant('Pod6::Text::Plain', 'type_new', $newtext));
+        }
+
+        $newparts;
+    }
+                
 
     method pseudopara:sym<implicit_code>($/) {
         # TOCORE should be @lines
@@ -179,6 +218,8 @@ class Pod6::Actions {
 
     method pseudopara:sym<nothing_implied>($/) {
         my $lines := collect-lines($/);
+
+        $lines := depreserve-text($lines) unless @*POD_BLOCKS[*-1].preserves-spaces;
 
         @*POD_BLOCKS[*-1].push(nqp::hllize($lines));
     }
