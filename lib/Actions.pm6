@@ -51,7 +51,9 @@ class Pod6::Actions {
         } else { # a delimited/paragraph/abbreviated block
             my $bname = $*BLOCK_NAME.ast;
             my $sname = ~$_ with $*BLOCK_NAME<semantic_standard_name>;
-            my $level = +~$_ with $*BLOCK_NAME<standard_name><level>;
+            my $level = 1 if $*BLOCK_NAME.Str eq 'item'; # only allow implicit level for =item
+
+            $level = +~$_ with $*BLOCK_NAME<standard_name><level>;
 
             nqp::push(@*POD_BLOCKS,
                       $M.add_constant($bname, 'type_new', :name($sname), :$level));

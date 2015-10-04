@@ -223,7 +223,7 @@ grammar Pod6::Grammar does GramError {
         | finish
         | <(head)> $<level>=[\d+]
         | input
-        | <(item)> $<level>=[\d+]?
+        | <(item)> $<level>=(\d+)?
         | nested
         | output
         | para
