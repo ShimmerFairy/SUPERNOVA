@@ -169,6 +169,8 @@ class Pod6::Actions {
     sub depreserve-text($parts) {
         my $newparts := nqp::list();
 
+        my $pidx := 0;
+
         for $parts.list -> $PART {
             my $newtext := nqp::unbox_s($PART.text);
             my $ws-start;
@@ -183,8 +185,8 @@ class Pod6::Actions {
 
                 # do a trim if it's whitespace at the start or end of the
                 # collection, otherwise replace with a single space
-                if nqp::elems($newparts) == 0                && $ws-start == 0 ||
-                   nqp::elems($newparts) + 1 == $parts.elems && $ws-end == nqp::chars($newtext) {
+                if $pidx     == 0            && $ws-start == 0 ||
+                   $pidx + 1 == $parts.elems && $ws-end   == nqp::chars($newtext) {
                     $newtext := nqp::replace($newtext, $ws-start, $ws-end - $ws-start, "");
                 } else {
                     $newtext := nqp::replace($newtext, $ws-start, $ws-end - $ws-start, " ");
@@ -195,6 +197,8 @@ class Pod6::Actions {
             }
 
             nqp::push($newparts, $M.add_constant('Pod6::Text::Plain', 'type_new', $newtext));
+
+            $pidx := nqp::add_i($pidx, 1);
         }
 
         $newparts;
