@@ -254,7 +254,7 @@ grammar Pod6::Grammar does GramError {
         | DEPENDENC[Y|IES]
         | BUGS?
         | SEE\-ALSOS?
-        | ACKNOWLEDGMENTS?
+        | ACKNOWLEDG[E?]MENTS?
         | COPYRIGHTS?
         | DISCLAIMERS?
         | LICENCES?

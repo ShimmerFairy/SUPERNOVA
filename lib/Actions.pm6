@@ -242,13 +242,17 @@ class Pod6::Actions {
         my $options := nqp::hash();
 
 # TOCORE probably needs changing, P6 hllizes asts
-        for $<configset>.ast {
-            nqp::bindkey($options, $_.key, $_.value);
+        with $<configset> {
+            for $<configset>.ast {
+                nqp::bindkey($options, $_.key, $_.value);
+            }
         }
 
-        for $<extra_config_line> {
-            for $_.ast {
-                nqp::bindkey($options, $_.key, $_.value);
+        with $<extra_config_line> {
+            for $<extra_config_line> {
+                for $_.ast {
+                    nqp::bindkey($options, $_.key, $_.value);
+                }
             }
         }
 

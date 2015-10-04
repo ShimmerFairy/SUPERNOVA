@@ -8,7 +8,7 @@ Semantic blocks are all in a separate test file, since they're somewhat
 different from the standard blocks, and there are so many.
 
 Blocks that imply para and/or code don't have the contents of those implied
-blocks tests, since =para and =code blocks are already tested on their
+blocks tested, since =para and =code blocks are already tested on their
 own. Testing implied blocks shouldn't be necessary, but if needed those tests
 can be added.
 
