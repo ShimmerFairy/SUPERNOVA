@@ -137,11 +137,23 @@ class Pod6::Actions {
         my $lines := nqp::list();
 
         for $<line> {
-            $_<one_token_text>.map: { nqp::push($lines, $^a.ast) }
+            for $_<one_token_text> {
+                if nqp::istype($_.ast, Pod6::Text::Plain) && nqp::elems($lines) &&
+                   nqp::istype($lines[*-1], Pod6::Text::Plain) {
+                    $lines[*-1].append($_.ast);
+                } else {
+                    nqp::push($lines, $_.ast);
+                }
+            }
 
             # stick the used newline at the end of the line, for space
             # preservation
-            nqp::push($lines, Pod6::Text::Plain.new(~$_<end_line>));
+
+            if nqp::istype($lines[*-1], Pod6::Text::Plain) {
+                $lines[*-1].append(~$_<end_line>);
+            } else {
+                nqp::push($lines, Pod6::Text::Plain.new(~$_<end_line>));
+            }
         }
 
         $lines

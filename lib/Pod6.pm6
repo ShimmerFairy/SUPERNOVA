@@ -97,6 +97,9 @@ class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
     }
 
     method text { [~] @!children }
+
+    multi method append(Str $new) { @!children.push($new) }
+    multi method append(Pod6::Text::Plain $new) { @!children.append($new.list) }
 }
 
 #| base role for formatting codes
