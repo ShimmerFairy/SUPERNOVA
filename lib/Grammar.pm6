@@ -17,11 +17,14 @@ sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
 sub shim-box_i(int $a) { nqp::box_i($a, Int) }
 
 use Exception;
-use GrammarError;
+#use GrammarError;
+
+# TOCORE used just to get our own error reporting stuff
+use Grammar::Parsefail;
 
 #use Grammar::Tracer;
 
-grammar Pod6::Grammar does GramError {
+grammar Pod6::Grammar is Grammar::Parsefail {
     token TOP {
         :my @*POD_BLOCKS := nqp::list();
 
@@ -29,21 +32,15 @@ grammar Pod6::Grammar does GramError {
 
         :my $*VMARGIN;
 
-        # TO-CORE stuff we won't need
-        :my @*WORRIES;
-        :my @*SORROWS;
-        :my $*SORRY_LIMIT := 10;
-
         <.start_document>
 
         <.blank_line>*
         [<block>
          <.blank_line>*]*
 
-        [ $ || <.panic(X::Pod6::Didn'tComplete)> ]
+        [ $ || <.typed_panic(X::Pod6::Didn'tComplete)> ]
 
-        <.cry-sorrows>
-        <.express-worries>
+        <.express_concerns>
     }
 
     token start_document { <?> }
@@ -92,7 +89,7 @@ grammar Pod6::Grammar does GramError {
     }
 
     token end_line {
-        $$ [\n || $ || <.parse-fail("Unknown line ending found.")>]
+        $$ [\n || $ || <.panic("Unknown line ending found.")>]
     }
 
     token blank_line {
@@ -137,7 +134,7 @@ grammar Pod6::Grammar does GramError {
         )*
 
         <.start_line> "=end" <.ws> [$<block_name>
-                                   || <badname=.block_name> {$<badname>.CURSOR.panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
+                                   || <badname=.block_name> {$<badname>.CURSOR.typed_panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
                                    ] <.ws> <.end_line>
         {$*LAST_BEGIN = $/} # for hints on extraneous =end blocks
     }
@@ -176,15 +173,15 @@ grammar Pod6::Grammar does GramError {
 
         <.end_non_delim>
 
-        {$¢.worry(X::Pod6::Encoding, target-enc => ~$<encoding>)}
+        {$¢.typed_worry(X::Pod6::Encoding, target-enc => ~$<encoding>)}
     }
 
     multi token directive:sym<alias> {
         "=alias" <.ws> $<AVal=.p6ident> <.ws>
         :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("alias")} <.new_block>
-        [<.end_line> {$¢.panic(X::Pod6::Alias, atype => "Contextual")}]?
+        [<.end_line> {$¢.typed_panic(X::Pod6::Alias, atype => "Contextual")}]?
 
-        \N+ {$¢.sorry(X::Pod6::Alias, atype => "Macro")}
+        \N+ {$¢.typed_sorry(X::Pod6::Alias, atype => "Macro")}
         <.end_line> <.end_non_delim>
     }
 
@@ -201,17 +198,17 @@ grammar Pod6::Grammar does GramError {
         "=end" <.ws> <block_name> #`(::)
         {
             if $*LAST_BEGIN {
-                $¢.panic(X::Pod6::ExtraEnd, HINT-MATCH => $*LAST_BEGIN);
+                $¢.typed_panic(X::Pod6::ExtraEnd, HINT-MATCH => $*LAST_BEGIN);
             } else {
-                $¢.panic(X::Pod6::ExtraEnd);
+                $¢.typed_panic(X::Pod6::ExtraEnd);
             }
         }
     }
 
     token block_name {
         || [<standard_name> | <semantic_standard_name>]
-        || <not_name> { $¢.panic(X::Pod6::Block::DirectiveAsName, culprit => ~$<not_name>) }
-        || <reserved_name> { $¢.sorry(X::Pod6::Block::ReservedName, culprit => ~$<reserved_name>) }
+        || <not_name> { $¢.typed_panic(X::Pod6::Block::DirectiveAsName, culprit => ~$<not_name>) }
+        || <reserved_name> { $¢.typed_sorry(X::Pod6::Block::ReservedName, culprit => ~$<reserved_name>) }
         || <typename>
     }
 
@@ -302,7 +299,7 @@ grammar Pod6::Grammar does GramError {
         ':'
         [
         | $<neg>=['!'] <key=.p6ident>
-        | <?[$@%&]> <.panic(X::Pod6::BadConfig, message => "Attempted to use variable as colonpair; only constants are allowed in Pod configuration")>
+        | <?[$@%&]> <.typed_panic(X::Pod6::BadConfig, message => "Attempted to use variable as colonpair; only constants are allowed in Pod configuration")>
         | <key=.p6ident> [$<value>=['(' ~ ')' [<podint>|<podstr>] | <cgroup>]]?
         ]
     }
@@ -328,15 +325,15 @@ grammar Pod6::Grammar does GramError {
     # this token lives to produce an error. Do not call unless/until you know
     # it's needed
     token non-const-term {
-        | <?before <+[$@%&]> | "::"> (\S\S?! <.p6ident>) {$¢.panic(X::Pod6::BadConfig, message => "Variable \"$0\" found in pod configuration; only constants are allowed")}
-        | "#" <.panic(X::Pod6::BadConfig, message => "Unexpected # in pod configuration. (Were you trying to comment out something?)")>
-        | ([\S & <-[\])>]>]+) {$¢.panic(X::Pod6::BadConfig, message => "Unknown term \"$0\" in configuration. Only constants are allowed.")}
+        | <?before <+[$@%&]> | "::"> (\S\S?! <.p6ident>) {$¢.typed_panic(X::Pod6::BadConfig, message => "Variable \"$0\" found in pod configuration; only constants are allowed")}
+        | "#" <.typed_panic(X::Pod6::BadConfig, message => "Unexpected # in pod configuration. (Were you trying to comment out something?)")>
+        | ([\S & <-[\])>]>]+) {$¢.typed_panic(X::Pod6::BadConfig, message => "Unknown term \"$0\" in configuration. Only constants are allowed.")}
     }
 
     token configset {
         <config_option> +%% [ <.ws>
                               [ $<badcomma>=[\,] <.ws>
-                                {$<badcomma>[*-1].CURSOR.worry(X::Pod6::BadConfig::Comma)}
+                                {$<badcomma>[*-1].CURSOR.typed_worry(X::Pod6::BadConfig::Comma)}
                               ]?
                             ]
     }

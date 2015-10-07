@@ -285,13 +285,13 @@ class Pod6::Actions {
 
     method config_option:sym<colonpair>($/) {
         if $<value> {
-            $<value>.CURSOR.sorry(X::Pod6::BadConfig,
-                                  message => 'Cannot negate colonpair and provide value at the same time') if $<neg>;
+            $<value>.CURSOR.typed_sorry(X::Pod6::BadConfig,
+                                        message => 'Cannot negate colonpair and provide value at the same time') if $<neg>;
 
             make (~$<key> => ($<podint> ?? $<podint>.ast !!
                               $<podstr> ?? $<podstr>.ast !!
                               $<cgroup> ?? $<cgroup>.ast !!
-                              $/.CURSOR.panic(X::Pod6::BadConfig, message => "Bad value: {$<value>.Str.perl}")));
+                              $/.CURSOR.typed_panic(X::Pod6::BadConfig, message => "Bad value: {$<value>.Str.perl}")));
         } elsif $<neg> {
             make (~$<key> => 0);
         } else {
@@ -303,7 +303,7 @@ class Pod6::Actions {
         make (~$<key> => ($<podint> ?? $<podint>.ast !!
                           $<podstr> ?? $<podstr>.ast !!
                           $<cgroup> ?? $<cgroup>.ast !!
-                          $/.CURSOR.panic(X::Pod6::BadConfig, message => "Bad value: {$<value>.Str.perl}")));
+                          $/.CURSOR.typed_panic(X::Pod6::BadConfig, message => "Bad value: {$<value>.Str.perl}")));
     }
 
     method podint($/) { make +~$/ }
