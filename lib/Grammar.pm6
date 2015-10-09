@@ -394,11 +394,11 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     token fcode_def_scheme { <?{$*FC eq 'L'}> <?before '#'> }
 
     token fcode_inside {
-        [ <!before $*CLOSER> <!before $*OPENER> [<?{$*PIPE_END}> <![|]> || <!{$*PIPE_END}>]
+        [ <!before $*CLOSER> [<?{$*PIPE_END}> <![|]> || <!{$*PIPE_END}>]
           [
-          | [ <formatting_code> || $<one>=[\N] ]
+          | [ <formatting_code> || <!before $*OPENER> $<one>=[\N] ]
           | <.end_line> <!blank_line> <.start_line>
-          | $*OPENER
+          | $<one>=[$*OPENER]
             [
             | <?same> <.typed_panic(X::Pod6::FCode::TooManyAngles)>
             | { $*BALANCES++ } <fcode_inside>
@@ -406,7 +406,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
           ]
         ]*
 
-        [<?{$*BALANCES > 0}> $*CLOSER { $*BALANCES-- }]?
+        [<?{$*BALANCES > 0}> $<one>=[$*CLOSER] { $*BALANCES-- }]?
     }
 
     token fcode_close {

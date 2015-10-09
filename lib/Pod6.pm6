@@ -164,6 +164,8 @@ class Pod6::Text::FormatCode::M does Pod6::Text::FormatCode {
     # in .verbatim, always get _this_ class' version of .text, which is the
     # default .text for Pod6::Text types
     method verbatim { self.Pod6::Text::FormatCode::M::text }
+
+    method verbatim-text { True }
 }
 
 class Pod6::Text::FormatCode::N does Pod6::Text::FormatCode { }

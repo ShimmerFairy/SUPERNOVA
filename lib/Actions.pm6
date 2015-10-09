@@ -408,6 +408,10 @@ class Pod6::Actions {
 
         nqp::push($syns, ~$_) for $<syn>;
 
+        # knock off first definition if we had to take it for the display text
+        # (and thus also main term)
+        nqp::shift($syns) unless $<display>;
+
         my $dt := $disptext;
         $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
         @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));

@@ -564,7 +564,7 @@ is $FC[2].text, " codes", "Third part of code has correct text";
 $FC = parse-fc("=para Z««zero-width Z«inside zero-width»!»»");
 
 isa-ok $FC, Pod6::Text::FormatCode::Z, "Z««»» code is of type Pod6::Text::FormatCode::Z";
-is $FC.text, "", "Z««»» code always acts as emtpy text";
+is $FC.text, "", "Z««»» code always acts as empty text";
 isa-ok $FC[1], Pod6::Text::FormatCode::Z, "Embedded Z«» inside Z««»»";
 is $FC.hidden, "zero-width !", "Z««»» hidden text doesn't show embedded Z«»";
 is $FC[1].hidden, "inside zero-width", "Embedded Z«» has correct hidden text";
