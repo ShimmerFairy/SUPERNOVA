@@ -53,6 +53,15 @@ class X::Pod6::Block::ReservedName is X::Pod6 {
     }
 }
 
+class X::Pod6::FormatCode::ReservedCode is X::Pod6 {
+    has $.culprit;
+    method message() { "Cannot use \"$.culprit\" as a formatting code, as it is reserved for future use." }
+    method hint-message() {
+        "Wrap in V<> (e.g. V<$.culprit><stuff>) if you didn't mean a formatting code.\n" ~
+        "Implement a class for M<> if you meant to create your own formatting code."
+    }
+}
+
 class X::Pod6::FCode::TooManyAngles is X::Pod6 {
     method message() {
         "Too many opening angle brackets in formatting code."

@@ -572,6 +572,13 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         <.fcode_close>
     }
 
+    multi token formatting_code:sym<reserved> {
+        $<fcode>=[<[FGHJOQWY]>] <?before <[<«]>>
+        :my $*FC; {$*FC = ~$<fcode>} <.can_do_fc>
+
+        {$¢.typed_sorry(X::Pod6::FormatCode::ReservedCode, culprit => ~$<fcode>)}
+    }
+
     # TO-CORE use the actual rule instead of p6ident, the version that doesn't
     # allow ::
     token p6ident {
