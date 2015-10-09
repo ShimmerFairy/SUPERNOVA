@@ -253,7 +253,7 @@ isa-ok $FC, Pod6::Text::FormatCode::L, "L«» code is of type Pod6::Text::Format
 isa-ok $FC, Pod6::Text::FormatCode::L::Doc, "L«doc:...» code is of type Pod6::Text::FormatCode::L::Doc";
 is $FC.text, "click here!", "L«» code has correct display text";
 is $FC.scheme, "doc", "L«» reports proper scheme name";
-is $FC.address, "S26#head#Pod #Block    types#Lists", "L«» reports correct whole address, space-preserved";
+is $FC.address, "S26#head# Pod#Block    types#Lists", "L«» reports correct whole address, space-preserved";
 is $FC.link, "doc:S26#head# Pod#Block    types#Lists", "L«» link is scheme + address";
 
 # ::Doc specific

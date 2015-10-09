@@ -17,7 +17,6 @@ sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
 sub shim-box_i(int $a) { nqp::box_i($a, Int) }
 
 use Exception;
-#use GrammarError;
 
 # TOCORE used just to get our own error reporting stuff
 use Grammar::Parsefail;
@@ -476,12 +475,13 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         $<terms>=(
             <.ws>
             [
-            | '0x' $<xnum>=[<xdigit>+]
-            | '0o' $<onum>=[<:Nv(0..7)>+]
-            | '0b' $<bnum>=[<:Nv(0..1)>+]
+            | '0x' $<xnum>=[[_? <.xdigit>]+]
+            | '0o' $<onum>=[[_? <:Numeric_Value(0..^8)>]+] # XXX use of ..^ is a workaround, should be 0..7
+            | '0b' $<bnum>=[[_? <:Numeric_Value(0..^2)>]+] # XXX also, meant to use Nv instead of long name
             | '0d'? $<dnum>=[\d+]
             | $<uname>=[<.alpha> [ <[\ -]> <.alpha> | <.alnum> ]* ]
             ]
+            <.ws>
         ) +% ';'
 
         <.fcode_close>
