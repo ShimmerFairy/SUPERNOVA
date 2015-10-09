@@ -84,16 +84,16 @@ role Pod6::Children[::ELEMT = Pod6::Excerpt] does Positional {
 }
 
 #| text found in a block (just a base class to text types)
-class Pod6::Text is Pod6::Excerpt {
-    multi method gist(Pod6::Text:D:) {
-        self.text.perl
-    }
-}
+class Pod6::Text is Pod6::Excerpt { }
 
 #| plain text in a block
 class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
     method new(*@children, *%config) {
         self.bless(:@children, :%config);
+    }
+
+    multi method gist(Pod6::Text:D:) {
+        self.text.perl
     }
 
     method text { [~] @!children }
@@ -103,7 +103,176 @@ class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
 }
 
 #| base role for formatting codes
-role Pod6::Text::FCode is Pod6::Text { }
+role Pod6::Text::FormatCode is Pod6::Text does Pod6::Children[Pod6::Text] {
+    method preserves-spaces { False }
+    method verbatim-text { False }
+
+    method text { [~] self.list».text }
+
+    multi method append(Str $new) { self.push(Pod6::Text::Plain.new($new)) }
+    multi method append(Pod6::Text $new) { self.push($new) }
+
+    multi method push(Str $new) { self.push(Pod6::Text::Plain.new($new)) }
+}
+
+#| role for reserved codes
+role Pod6::Text::FormatCode::Reserved {
+    method FALLBACK(|) {
+        die "This formatting code ({self.^name}) is reserved"
+    }
+}
+
+class Pod6::Text::FormatCode::A does Pod6::Text::FormatCode { }
+class Pod6::Text::FormatCode::B does Pod6::Text::FormatCode { }
+
+class Pod6::Text::FormatCode::C does Pod6::Text::FormatCode {
+    method preserves-spaces { True }
+    method verbatim-text { True }
+}
+
+class Pod6::Text::FormatCode::D does Pod6::Text::FormatCode {
+    has $.term;
+    has @.synonyms;
+
+    method set-term($t) { $!term = $t }
+    method set-synonyms(@s) { @!synonyms = @s }
+}
+
+class Pod6::Text::FormatCode::E does Pod6::Text::FormatCode { }
+class Pod6::Text::FormatCode::F does Pod6::Text::FormatCode::Reserved { }
+class Pod6::Text::FormatCode::G does Pod6::Text::FormatCode::Reserved { }
+class Pod6::Text::FormatCode::H does Pod6::Text::FormatCode::Reserved { }
+class Pod6::Text::FormatCode::I does Pod6::Text::FormatCode { }
+class Pod6::Text::FormatCode::J does Pod6::Text::FormatCode::Reserved { }
+
+class Pod6::Text::FormatCode::K does Pod6::Text::FormatCode {
+    method preserves-spaces { True }
+}
+
+class Pod6::Text::FormatCode::L does Pod6::Text::FormatCode {
+    has $.address;
+
+    method set-address($addr) { $!address = $addr }
+
+    method scheme { fail "No scheme set for {self.^name}" }
+    method link { self.scheme ~ self.address }
+}
+
+class Pod6::Text::FormatCode::M does Pod6::Text::FormatCode {
+
+    # in .verbatim, always get _this_ class' version of .text, which is the
+    # default .text for Pod6::Text types
+    method verbatim { self.Pod6::Text::FormatCode::M::text }
+}
+
+class Pod6::Text::FormatCode::N does Pod6::Text::FormatCode { }
+class Pod6::Text::FormatCode::O does Pod6::Text::FormatCode::Reserved { }
+
+class Pod6::Text::FormatCode::P does Pod6::Text::FormatCode {
+    has $.address;
+
+    method set-address($addr) { $!address = $addr }
+
+    method scheme { fail "No scheme set for {self.^name}" }
+    method link { self.scheme ~ self.address }
+}
+
+class Pod6::Text::FormatCode::Q does Pod6::Text::FormatCode::Reserved { }
+class Pod6::Text::FormatCode::R does Pod6::Text::FormatCode { }
+
+class Pod6::Text::FormatCode::S does Pod6::Text::FormatCode {
+    method preserves-spaces { True }
+}
+
+class Pod6::Text::FormatCode::T does Pod6::Text::FormatCode {
+    method preserves-spaces { True }
+}
+
+class Pod6::Text::FormatCode::U does Pod6::Text::FormatCode { }
+
+class Pod6::Text::FormatCode::V does Pod6::Text::FormatCode {
+    method verbatim-text { True }
+}
+
+class Pod6::Text::FormatCode::W does Pod6::Text::FormatCode::Reserved { }
+
+class Pod6::Text::FormatCode::X does Pod6::Text::FormatCode {
+    has %.entries;
+
+    method add-entry($e) { %!entries{$e} = True }
+    method add-subentry($e, @se) {
+        my $new := %!entries{$e};
+        $new := $new{$_} for @se;
+        $new = True;
+    }
+}
+
+class Pod6::Text::FormatCode::Y does Pod6::Text::FormatCode::Reserved { }
+
+class Pod6::Text::FormatCode::Z does Pod6::Text::FormatCode {
+    method text { "" }
+    method hidden { self.Pod6::Text::FormatCode::text }
+}
+
+#### Specialized L<> classes
+
+class Pod6::Text::FormatCode::L::Http is Pod6::Text::FormatCode::L {
+    has $.internal = "";
+    has $.external;
+
+    method set-address($a) { ($!external, $!internal) = $a.split('#', 2) }
+
+    method scheme { "http" }
+    method address { self.external ~ self.internal }
+}
+
+class Pod6::Text::FormatCode::L::Doc is Pod6::Text::FormatCode::L {
+    has $.doc;
+    has $.inner-by = "onehead";
+    has @.inner;
+
+    # based on conjectural internal addressing
+    method set-address($a) {
+        my @p = $a.split("#");
+
+        $!doc = @p.shift;
+        $!inner-by = @p.shift if +@p > 1;
+        @!inner = @p;
+    }
+
+    method scheme { "doc" }
+    method address { self.doc ~ (+@!inner ?? '#' ~ ($!inner-by, |@!inner).join("#") !! "") }
+}
+
+#### Specialized P<> classes
+
+class Pod6::Text::FormatCode::P::Http is Pod6::Text::FormatCode::P {
+    has $.internal = "";
+    has $.external;
+
+    method set-address($a) { ($!external, $!internal) = $a.split('#', 2) }
+
+    method scheme { "http" }
+    method address { self.external ~ self.internal }
+}
+
+class Pod6::Text::FormatCode::P::Doc is Pod6::Text::FormatCode::P {
+    has $.doc;
+    has $.inner-by = "onehead";
+    has @.inner;
+
+    # based on conjectural internal addressing
+    method set-address($a) {
+        my @p = $a.split("#");
+
+        $!doc = @p.shift;
+        $!inner-by = @p.shift if +@p > 1;
+        @!inner = @p;
+    }
+
+    method scheme { "doc" }
+    method address { self.doc ~ (+@!inner ?? '#' ~ ($!inner-by, |@!inner).join("#") !! "") }
+}
 
 class Pod6::Config { ... }
 

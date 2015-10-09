@@ -8,7 +8,7 @@ use Actions;
 
 #?DOES 2
 sub parse-fc($pod) {
-    my $a = Pod6::Grammar.parse($pod, :actions(Pod6::Actions));
+    my $a = Pod6::Grammar.parse($pod, :actions(Pod6::Actions)).ast;
 
     isa-ok $a, Pod6::Document, "Returned AST is a Pod6::Document";
 
@@ -25,6 +25,8 @@ my $FC;
 #### A
 ####
 
+skip("A<> NYI", 9);
+#`⟅
 $FC = Pod6::Grammar.parse(q:to/END_A/, :actions(Pod6::Actions));
     =alias foo BAR
     =para A<foo>
@@ -52,6 +54,7 @@ $FC = parse-fc('=para A<<$?FILE>>');
 
 isa-ok $FC, Pod6::Text::FormatCode::A, "A<<>> code is of type Pod6::Text::FormatCode::A";
 is $FC.text, $?FILE, "A<<>> code substituted compile-time constant correctly";
+⟆
 
 # XXX more A<> tests (involving pure-only method calls on stuff)
 
@@ -256,7 +259,7 @@ is $FC.link, "doc:S26#head# Pod#Block    types#Lists", "L«» link is scheme + a
 # ::Doc specific
 is $FC.doc, "S26", "L«doc:...» specifies correct document";
 is $FC.inner-by, "head", "L«doc:...» internal address info specifies how to resolve said address";
-is-deeply, $FC.inner, «Pod  "Block types"  Lists», "L«doc:...» correctly interpreted internal address (not space-preserved)";
+is-deeply $FC.inner, «Pod  "Block types"  Lists», "L«doc:...» correctly interpreted internal address (not space-preserved)";
 
 $FC = parse-fc("=para L<<more display|http://docs.perl6.org/type/Pod::Block#Methods>>");
 
@@ -276,14 +279,15 @@ is $FC.internal, "Methods", "L<<http:...>> gives correct internal address";
 ## test scheme without predefined class (should ideally 'autogen' a default
 ## class).
 
-$FC = parse-fc("=para L«««xyzzy:my-own#address-thing»»»");
+skip('Autogen classes NYI', 8);
+#$FC = parse-fc("=para L«««xyzzy:my-own#address-thing»»»");
 
-isa-ok $FC, Pod6::Text::FormatCode::L, "L«««»»» code is of type Pod6::Text::FormatCode::L";
-isa-ok $FC, Pod6::Text::FormatCode::L::Xyzzy, "L«««xyzzy:...»»» is autogen'd subclass Pod6::Text::FormatCode::L::Xyzzy";
-is $FC.text, "xyzzy:my-own#address-thing", "L«««»»» has correct display text";
-is $FC.scheme, "xyzzy", "L«««»»» has correct scheme name";
-is $FC.address, "my-own#address-thing", "L«««»»» has correct address";
-is $FC.link, "xyzzy:my-own#address-thing", "L«««»»» has correct link";
+#isa-ok $FC, Pod6::Text::FormatCode::L, "L«««»»» code is of type Pod6::Text::FormatCode::L";
+#isa-ok $FC, Pod6::Text::FormatCode::L::Xyzzy, "L«««xyzzy:...»»» is autogen'd subclass Pod6::Text::FormatCode::L::Xyzzy";
+#is $FC.text, "xyzzy:my-own#address-thing", "L«««»»» has correct display text";
+#is $FC.scheme, "xyzzy", "L«««»»» has correct scheme name";
+#is $FC.address, "my-own#address-thing", "L«««»»» has correct address";
+#is $FC.link, "xyzzy:my-own#address-thing", "L«««»»» has correct link";
 
 ####
 #### M
@@ -300,12 +304,13 @@ isa-ok $FC, Pod6::Text::FormatCode::M::Foobar, "M<foobar:...> is of type Pod6::T
 is $FC.verbatim, "some V<verbatim>, space-preserved text", "M<> provides verbatim text";
 is $FC.text, "I'm a custom M<> code!", "M<> provides expected text";
 
-$FC = parse-fc("=para M«xyzzy: another piece of M«» text»");
+skip('Autogen classes NYI', 6);
+#$FC = parse-fc("=para M«xyzzy: another piece of M«» text»");
 
-isa-ok $FC, Pod6::Text::FormatCode::M, "M«» code is of type Pod6::Text::FormatCode::M";
-isa-ok $FC, Pod6::Text::FormatCode::M::Xyzzy, "M«xyzzy:...» is of autogen'd type Pod6::Text::FormatCode::M::Xyzzy";
-is $FC.verbatim, " another piece of M«» text", "M«» gives correct verbatim text";
-is $FC.text, " another piece of M«» text", "M«» has correct default display text";
+#isa-ok $FC, Pod6::Text::FormatCode::M, "M«» code is of type Pod6::Text::FormatCode::M";
+#isa-ok $FC, Pod6::Text::FormatCode::M::Xyzzy, "M«xyzzy:...» is of autogen'd type Pod6::Text::FormatCode::M::Xyzzy";
+#is $FC.verbatim, " another piece of M«» text", "M«» gives correct verbatim text";
+#is $FC.text, " another piece of M«» text", "M«» has correct default display text";
 
 ####
 #### N
@@ -350,13 +355,14 @@ is $FC.link, "doc:A02", "P<> code gives correct link";
 dies-ok { $FC.text }, "P<> can't return .text, since it's supposed to be retrieved by the renderer";
 # the above test about .text is just conjectured behavior atm.
 
-$FC = parse-fc("=para P«xyzzy:place-thing»");
+skip('Autogen classes NYI', 7);
+#$FC = parse-fc("=para P«xyzzy:place-thing»");
 
-isa-ok $FC, Pod6::Text::FormatCode::P, "P«» code is of type Pod6::Text::FormatCode::P";
-isa-ok $FC, Pod6::Text::FormatCode::P::Xyzzy, "P«» code is of autogen'd type Pod6::Text::FormatCode::P::Xyzzy";
-is $FC.scheme, "xyzzy", "P«» code gives correct scheme name";
-is $FC.address, "place-thing", "P«» code gives correct address";
-is $FC.link, "xyzzy:place-thing", "P«» code gives correct link";
+#isa-ok $FC, Pod6::Text::FormatCode::P, "P«» code is of type Pod6::Text::FormatCode::P";
+#isa-ok $FC, Pod6::Text::FormatCode::P::Xyzzy, "P«» code is of autogen'd type Pod6::Text::FormatCode::P::Xyzzy";
+#is $FC.scheme, "xyzzy", "P«» code gives correct scheme name";
+#is $FC.address, "place-thing", "P«» code gives correct address";
+#is $FC.link, "xyzzy:place-thing", "P«» code gives correct link";
 
 # standard P<> schemes tested separately
 
@@ -494,32 +500,32 @@ $FC = parse-fc("=para X<a term>");
 isa-ok $FC, Pod6::Text::FormatCode::X, "X<> code is of type Pod6::Text::FormatCode::X";
 is $FC.text, "a term", "X<> code has correct display text";
 is $FC.entries.elems, 1, "X<> code has one entry";
-is $FC.entries[0], "a term", "X<> code has right entry";
+ok $FC.entries{"a term"}, "X<> code has right entry";
 
 $FC = parse-fc("=para X«  display  text | entry »");
 
 isa-ok $FC, Pod6::Text::FormatCode::X, "X«» code is of type Pod6::Text::FormatCode::X";
 is $FC.text, "display text", "X«» code has correct (non-space-preserved) text";
 is $FC.entries.elems, 1, "X«» code has one entry";
-is $FC.entries[0], "entry", "X«» has correct entry";
+ok $FC.entries{"entry"}:exists, "X«» has correct entry";
 
 $FC = parse-fc("=para X<<<display|entry 1, meaning of, first>>>");
 
 isa-ok $FC, Pod6::Text::FormatCode::X, "X<<<>>> code is of type Pod6::Text::FormatCode::X";
 is $FC.text, "display", "X<<<>>> has correct display text";
 is $FC.entries.elems, 1, "X<<<>>> has one entry";
-is $FC.entries[0].key, "entry 1", "X<<<>>> entry has correct top-level name";
-is $FC.entries[0].value, "meaning of" => "first", "X<<<>>> entry has correct (non-space-preserved) subentries";
+ok $FC.entries{"entry 1"}:exists, "X<<<>>> entry has correct top-level name";
+is $FC.entries{"entry 1"}, "meaning of" => "first", "X<<<>>> entry has correct (non-space-preserved) subentries";
 
 $FC = parse-fc("=para X««entry 1, subent; entry 2; entry 3»»");
 
 isa-ok $FC, Pod6::Text::FormatCode::X, "X««»» code is of type Pod6::Text::FormatCode::X";
 is $FC.text, "entry 1", "X««»» has the correct display text";
 is $FC.entries.elems, 3, "X««»» has three entries";
-is $FC.entries[0].key, "entry 1", "X««»» has correct first entry";
-is $FC.entries[0].value, "subent", "X««»» first entry has proper subentry";
-is $FC.entries[1], "entry 2", "X««»» has correct second entry, non-space-preserved";
-is $FC.entries[2], "entry 3", "X««»» has correct third entry";
+ok $FC.entries{"entry 1"}:exists, "X««»» has correct first entry";
+is $FC.entries{"entry 1"}, "subent", "X««»» first entry has proper subentry";
+ok $FC.entries{"entry 2"}:exists, "X««»» has correct second entry, non-space-preserved";
+ok $FC.entries{"entry 3"}:exists, "X««»» has correct third entry";
 
 ####
 #### Y

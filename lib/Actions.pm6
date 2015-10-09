@@ -174,6 +174,11 @@ class Pod6::Actions {
         my $pidx := 0;
 
         for $parts.list -> $PART {
+            if nqp::istype($PART, Pod6::Text::FormatCode) {
+                nqp::push($newparts, $PART);
+                next;
+            }
+
             my $newtext := nqp::unbox_s($PART.text);
             my $ws-start;
             my $ws-end;
@@ -329,5 +334,166 @@ class Pod6::Actions {
 
             make $opts;
         }
+    }
+
+    method fcode_open($/) {
+        my $name := nqp::concat('Pod6::Text::FormatCode::', $*FC);
+        my $conf := @*POD_BLOCKS[*-1].last-config-block.grab-config-for($*FC ~ '<>');
+
+        nqp::push(@*FORMAT_CODES, $M.add_constant($name, 'type_new'));
+        @*FORMAT_CODES[*-1].set-config($conf);
+    }
+
+    method fcode_scheme($/) {
+        # in this case, we now know what class to really use
+        my $old := nqp::pop(@*FORMAT_CODES);
+
+        my $newname := nqp::concat($old.^name, '::');
+        $newname := nqp::concat($newname, (~$/).trim.tclc);
+
+        nqp::push(@*FORMAT_CODES, $M.add_constant($newname, 'type_new', |$old.list, |$old.hash));
+    }
+
+    # the default scheme, for L<> only, is doc: (should only be left out for
+    # sections, the grammar side of this checks that)
+    method fcode_def_scheme($/) {
+        my $old := nqp::pop(@*FORMAT_CODES);
+
+        my $newname := nqp::concat($old.^name, '::');
+        $newname := nqp::concat($newname, 'Doc');
+
+        nqp::push(@*FORMAT_CODES, $M.add_constant($newname, 'type_new', |$old.list, |$old.hash));
+    }
+
+    method fcode_inside($/) {
+        my $parts := nqp::list();
+
+        for $/.caps {
+            if $_<formatting_code> {
+                nqp::push($parts, $_<formatting_code>.ast);
+            } elsif $_<one> {
+                if nqp::elems($parts) && nqp::istype($parts[*-1], Pod6::Text::Plain) {
+                    $parts[*-1].append(~$_<one>);
+                } else {
+                    nqp::push($parts, $M.add_constant('Pod6::Text::Plain', 'type_new', ~$_<one>));
+                }
+            } elsif $_<fcode_inside> {
+                for $_<fcode_inside>.ast {
+                    if nqp::istype($_, Pod6::Text::Plain) {
+                        if nqp::elems($parts) && nqp::istype($parts[*-1], Pod6::Text::Plain) {
+                            $parts[*-1].append($_);
+                        } else {
+                            nqp::push($parts, $_);
+                        }
+                    } else {
+                        nqp::push($parts, $_);
+                    }
+                }
+            } else {
+                die "AH $_";
+            }
+        }
+
+        make $parts
+    }
+
+    method formatting_code:sym<A>($/) {
+        # supporting sigils will seem to require NQP features we just don't
+        # have. ( ::('$?FILE') doesn't work, critically ) The =alias kind (for
+        # non-ambient) should be available soon-ish.
+
+        $/.CURSOR.panic("A<> NYI");
+    }
+
+    method formatting_code:sym<D>($/) {
+        my $disptext := $<display> ?? $<display>.ast !! ~$<syn>[0];
+
+        my $syns := nqp::list();
+
+        nqp::push($syns, ~$_) for $<syn>;
+
+        @*FORMAT_CODES[*-1].push($disptext);
+        @*FORMAT_CODES[*-1].set-term(@*FORMAT_CODES[*-1].text); # use plaintext version of display text
+        @*FORMAT_CODES[*-1].set-synonyms(nqp::hllize($syns));
+
+        make nqp::pop(@*FORMAT_CODES);
+    }
+
+    method formatting_code:sym<E>($/) {
+        my $convchars := "";
+
+        for $<terms> {
+            if $_<uname> {
+                my $ord := nqp::codepointfromname(~$_<uname>);
+
+                if nqp::iseq_i($ord, -1) {
+                    $/.CURSOR.panic("Invalid Unicode name");
+                }
+
+                $convchars := nqp::concat($convchars, nqp::chr($ord));
+            } else {
+                my $ord;
+
+                if $_<xnum> {
+                    $ord := nqp::radix(16, ~$_<xnum>, 0, 0)[0];
+                } elsif $_<onum> {
+                    $ord := nqp::radix( 8, ~$_<onum>, 0, 0)[0];
+                } elsif $_<bnum> {
+                    $ord := nqp::radix( 2, ~$_<bnum>, 0, 0)[0];
+                } elsif $_<dnum> {
+                    $ord := nqp::radix(10, ~$_<dnum>, 0, 0)[0];
+                }
+
+                $convchars := nqp::concat($convchars, nqp::chr($ord));
+            }
+        }
+
+        @*FORMAT_CODES[*-1].push($convchars);
+
+        make nqp::pop(@*FORMAT_CODES);
+    }
+
+    method formatting_code:sym<LP>($/) {
+        my $disptext := $<display> ?? $<display>.ast !!
+                        nqp::concat(@*FORMAT_CODES[*-1].scheme, ~$<address>);
+
+        @*FORMAT_CODES[*-1].push($disptext);
+
+        @*FORMAT_CODES[*-1].set-address(~$<address>);
+
+        make nqp::pop(@*FORMAT_CODES);
+    }
+
+    method formatting_code:sym<M>($/) {
+        @*FORMAT_CODES[*-1].push($<text>.ast);
+
+        make nqp::pop(@*FORMAT_CODES);
+    }
+
+    method formatting_code:sym<X>($/) {
+        my $entries := nqp::list();
+        my $disptext := $<display> ?? $<display>.ast !! ~$<entry>[0]<main>;
+
+        for $<entry> {
+            if $_<subent> {
+                my $selist := nqp::list();
+
+                nqp::push($selist, ~$_) for $_<subent>;
+
+                @*FORMAT_CODES[*-1].add-subentry(~$_<main>, $selist);
+            } else {
+                @*FORMAT_CODES[*-1].add-entry(~$_<main>);
+            }
+        }
+
+        @*FORMAT_CODES[*-1].push($disptext);
+
+        make nqp::pop(@*FORMAT_CODES);
+    }
+
+    method formatting_code:sym<normal>($/) {
+        @*FORMAT_CODES[*-1].push($<contents>.ast);
+
+        make nqp::pop(@*FORMAT_CODES);
     }
 }

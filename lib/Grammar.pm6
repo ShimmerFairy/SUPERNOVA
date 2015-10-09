@@ -27,6 +27,7 @@ use Grammar::Parsefail;
 grammar Pod6::Grammar is Grammar::Parsefail {
     token TOP {
         :my @*POD_BLOCKS := nqp::list();
+        :my @*FORMAT_CODES := nqp::list();
 
         :my $*LAST_BEGIN;
 
@@ -177,7 +178,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token directive:sym<alias> {
-        "=alias" <.ws> $<AVal=.p6ident> <.ws>
+        "=alias" <.ws> <AVal=.p6ident> <.ws>
         :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("alias")} <.new_block>
         [<.end_line> {$¢.typed_panic(X::Pod6::Alias, atype => "Contextual")}]?
 
@@ -377,10 +378,176 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     token one_token_text {
-        [<!formatting_code> \N]+ | <formatting_code>
+        <formatting_code> || \N
     }
 
-    token formatting_code { <!> }
+    token fcode_open {
+        [
+        | ('<'+) { $*OPENER := $0.Str; $*CLOSER := '>' x $0.Str.chars }
+        | ('«'+) { $*OPENER := $0.Str; $*CLOSER := '»' x $0.Str.chars }
+        ]
+    }
+
+    token fcode_scheme { <( [<![:]> <!before $*CLOSER> .]+ )> ':' }
+
+    token fcode_def_scheme { <?{$*FC eq 'L'}> <?before '#'> }
+
+    token fcode_inside {
+        [ <!before $*CLOSER> <!before $*OPENER> [<?{$*PIPE_END}> <![|]> || <!{$*PIPE_END}>]
+          [
+          | [ <formatting_code> || $<one>=[\N] ]
+          | <.end_line> <!blank_line> <.start_line>
+          | $*OPENER
+            [
+            | <?same> <.typed_panic(X::Pod6::FCode::TooManyAngles)>
+            | { $*BALANCES++ } <fcode_inside>
+            ]
+          ]
+        ]*
+
+        [<?{$*BALANCES > 0}> $*CLOSER { $*BALANCES-- }]?
+    }
+
+    token fcode_close {
+        [
+        | $*CLOSER
+        | <.blank_line> <.typed_worry(X::Pod6::FCode::ForcedStop)>
+        ]
+    }
+
+    proto token formatting_code {*}
+
+    multi token formatting_code:sym<A> {
+        A
+
+        :my $*FC = "A";
+        :my $*OPENER;
+        :my $*CLOSER;
+
+        <.fcode_open>
+
+        $<ident>=[ $<sigil>=[<[$@%&]>]? <.p6ident> ]
+
+        # currently doesn't allow arguments to method
+        $<methods>=(\. <mname=p6ident>)*
+
+        <.fcode_close>
+    }
+
+    multi token formatting_code:sym<D> {
+        D
+
+        :my $*FC = "D";
+        :my $*OPENER;
+        :my $*CLOSER;
+
+        <.fcode_open>
+
+        :my $*BALANCES = 0;
+        :my $*PIPE_END := 1;
+
+        [<display=fcode_inside> '|']?
+
+        $<syn>=[ [<![;]> <!before $*CLOSER> .]+ ] *% ';'
+
+        <.fcode_close>
+    }
+
+    multi token formatting_code:sym<E> {
+        E
+
+        :my $*FC = "E";
+        :my $*OPENER;
+        :my $*CLOSER;
+
+        <.fcode_open>
+
+        $<terms>=(
+            <.ws>
+            [
+            | '0x' $<xnum>=[<xdigit>+]
+            | '0o' $<onum>=[<:Nv(0..7)>+]
+            | '0b' $<bnum>=[<:Nv(0..1)>+]
+            | '0d'? $<dnum>=[\d+]
+            | $<uname>=[<.alpha> [ <[\ -]> <.alpha> | <.alnum> ]* ]
+            ]
+        ) +% ';'
+
+        <.fcode_close>
+    }
+
+    multi token formatting_code:sym<LP> {
+        $<fcode>=[<[LP]>]
+
+        :my $*FC; {$*FC = ~$<fcode>}
+        :my $*OPENER;
+        :my $*CLOSER;
+
+        <.fcode_open>
+
+        :my $*PIPE_END := 1;
+        :my $*BALANCES = 0;
+
+        [<display=fcode_inside> '|']?
+
+        [ <.fcode_scheme> || <.fcode_def_scheme> ]
+        $<address>=[[<!before $*CLOSER> .]+]
+
+        <.fcode_close>
+    }
+
+    multi token formatting_code:sym<M> {
+        M
+
+        :my $*FC = "M";
+        :my $*OPENER;
+        :my $*CLOSER;
+        :my $*BALANCES = 0;
+
+        <.fcode_open>
+
+        <.fcode_scheme>
+        <text=fcode_inside>
+
+        <.fcode_close>
+    }
+
+    multi token formatting_code:sym<X> {
+        X
+
+        :my $*FC = "X";
+        :my $*OPENER;
+        :my $*CLOSER;
+
+        <.fcode_open>
+
+        :my $*PIPE_END := 1;
+        :my $*BALANCES = 0;
+
+        [<display=fcode_inside> '|']?
+
+        $<entry>=(
+            $<main>=[[<![,;]> <!before $*CLOSER> .]+]
+            [',' $<subent>=[[<![,;]> <!before $*CLOSER> .]+]]*
+        ) +% ';'
+
+        <.fcode_close>
+    }
+
+    multi token formatting_code:sym<normal> {
+        $<fcode>=[<[BCIKNRSTUVZ]>]
+
+        :my $*FC; {$*FC = ~$<fcode>}
+        :my $*OPENER;
+        :my $*CLOSER;
+        :my $*BALANCES = 0;
+
+        <.fcode_open>
+
+        <contents=fcode_inside>
+
+        <.fcode_close>
+    }
 
     # TO-CORE use the actual rule instead of p6ident, the version that doesn't
     # allow ::

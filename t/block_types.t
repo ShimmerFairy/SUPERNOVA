@@ -62,7 +62,7 @@ is $code.text, qq:to/END_TEST_CODE/, "=code is space-preserved";
 
 $code = parse-block("=code B<things> are V<verbatim>.");
 
-nok $code.list.any ~~ Pod6::Text::FCode, "=code is verbatim (doesn't parse format codes)";
+nok $code.list.any ~~ Pod6::Text::FormatCode, "=code is verbatim (doesn't parse format codes)";
 
 #### =comment
 
@@ -81,14 +81,13 @@ is $comment.text, "no space preservation should happen in this.", "=comment isn'
 
 $comment = parse-block("=comment B<Formatting> codes are I<parsed>.");
 
-ok $code.list.any ~~ Pod6::Text::FCode, "=comment isn't verbatim (parses format codes)";
+ok $code.list.any ~~ Pod6::Text::FormatCode, "=comment isn't verbatim (parses format codes)";
 
-skip("Formatting codes NYI", 2);
-#`{
-    my @fcodes = $code.list.grep(* ~~ Pod6::Text::FCode);
+{
+    my @fcodes = $code.list.grep(* ~~ Pod6::Text::FormatCode);
 
-    isa-ok @fcodes[0], Pod6::Text::FCode::B, "B<> code parsed as a Pod6::Text::FCode::B";
-    isa-ok @fcodes[1], Pod6::Text::FCode::I, "I<> code parsed as a Pod6::Text::FCode::I";
+    isa-ok @fcodes[0], Pod6::Text::FormatCode::B, "B<> code parsed as a Pod6::Text::FormatCode::B";
+    isa-ok @fcodes[1], Pod6::Text::FormatCode::I, "I<> code parsed as a Pod6::Text::FormatCode::I";
 }
 
 #### =defn
@@ -138,14 +137,13 @@ $head = parse-block("=head3  and some C<formatting> codes, which U<should> be pa
 
 is $head.level, 3, "=head3 is set at level 3";
 
-ok $head.list.any ~~ Pod6::Text::FCode, "=head3 parses formatting codes (isn't verbatim)";
+ok $head.list.any ~~ Pod6::Text::FormatCode, "=head3 parses formatting codes (isn't verbatim)";
 
-skip("format codes NYI", 2);
-#`{
-    my @fcodes = $head.list.grep(* ~~ Pod6::Text::FCode);
+{
+    my @fcodes = $head.list.grep(* ~~ Pod6::Text::FormatCode);
 
-    isa-ok @fcodes[0], Pod6::Text::FCode::C, "C<> code parsed as a Pod6::Text::FCode::C";
-    isa-ok @fcodes[1], Pod6::Text::FCode::U, "U<> code parsed as a Pod6::Text::FCode::U";
+    isa-ok @fcodes[0], Pod6::Text::FormatCode::C, "C<> code parsed as a Pod6::Text::FormatCode::C";
+    isa-ok @fcodes[1], Pod6::Text::FormatCode::U, "U<> code parsed as a Pod6::Text::FormatCode::U";
 }
 
 #### =input
@@ -167,14 +165,13 @@ is $input.text, q:to/END_TEST_INPUT/, "=input is space-preserved";
 
 $input = parse-block("=input Does accept B<format> I<codes>.");
 
-ok $input.list.any ~~ Pod6::Text::FCode, "=input parses formatting codes";
+ok $input.list.any ~~ Pod6::Text::FormatCode, "=input parses formatting codes";
 
-skip("format codes NYI", 2);
-#`{
-    my @fcodes = $input.list.grep(* ~~ Pod6::Text::FCode);
+{
+    my @fcodes = $input.list.grep(* ~~ Pod6::Text::FormatCode);
 
-    isa-ok @fcodes[0], Pod6::Text::FCode::B, "B<> code parsed as a Pod6::Text::FCode::B";
-    isa-ok @fcodes[1], Pod6::Text::FCode::I, "I<> code parsed as a Pod6::Text::FCode::I";
+    isa-ok @fcodes[0], Pod6::Text::FormatCode::B, "B<> code parsed as a Pod6::Text::FormatCode::B";
+    isa-ok @fcodes[1], Pod6::Text::FormatCode::I, "I<> code parsed as a Pod6::Text::FormatCode::I";
 }
 
 #### =item
@@ -244,14 +241,13 @@ is $output.text, q:to/END_TEST_OUTPUT/, "=output is space-preserved";
 
 $output = parse-block("=output And yet I<does> allow C<formatting codes>.");
 
-ok $output.list.any ~~ Pod6::Text::FCode, "=output allows formatting codes";
+ok $output.list.any ~~ Pod6::Text::FormatCode, "=output allows formatting codes";
 
-skip("format codes NYI", 2);
-#`{
-    my @fcodes = $output.list.grep(* ~~ Pod6::Text::FCode);
+{
+    my @fcodes = $output.list.grep(* ~~ Pod6::Text::FormatCode);
 
-    isa-ok @fcodes[0], Pod6::Text::FCode::I, "I<> code parsed as Pod6::Text::FCode::I";
-    isa-ok @fcodes[1], Pod6::Text::FCode::C, "C<> code parsed as Pod6::Text::FCode::C";
+    isa-ok @fcodes[0], Pod6::Text::FormatCode::I, "I<> code parsed as Pod6::Text::FormatCode::I";
+    isa-ok @fcodes[1], Pod6::Text::FormatCode::C, "C<> code parsed as Pod6::Text::FormatCode::C";
 }
 
 #### =para
@@ -270,14 +266,13 @@ is $para.text, "A bare paragraph, implies nothing but still no space preservatio
 
 $para = parse-block("=para And of course, I<all> formatting codes allowed in a R<para>.");
 
-ok $para.list.any ~~ Pod6::Text::FCode, "=para allows formatting codes";
+ok $para.list.any ~~ Pod6::Text::FormatCode, "=para allows formatting codes";
 
-skip("format codes NYI", 2);
-#`{
-    my @fcodes = $output.list.grep(* ~~ Pod6::Text::FCode);
+{
+    my @fcodes = $output.list.grep(* ~~ Pod6::Text::FormatCode);
 
-    isa-ok @fcodes[0], Pod6::Text::FCode::I, "I<> code parsed as Pod6::Text::FCode::I";
-    isa-ok @fcodes[1], Pod6::Text::FCode::R, "R<> code parsed as Pod6::Text::FCode::R";
+    isa-ok @fcodes[0], Pod6::Text::FormatCode::I, "I<> code parsed as Pod6::Text::FormatCode::I";
+    isa-ok @fcodes[1], Pod6::Text::FormatCode::R, "R<> code parsed as Pod6::Text::FormatCode::R";
 }
 
 #### =pod
@@ -325,14 +320,13 @@ is $data.text, q:to/END_TEST_DATA/, "=data preserves spaces";
 
 $data = parse-block("=data Accepts I<formatting> codes N<at least for now>.");
 
-ok $data.list.any ~~ Pod6::Text::FCode, "=data accepts formatting codes";
+ok $data.list.any ~~ Pod6::Text::FormatCode, "=data accepts formatting codes";
 
-skip("format codes NYI", 2);
-#`{
-    my @fcodes = $data.list.grep(* ~~ Pod6::Text::FCode);
+{
+    my @fcodes = $data.list.grep(* ~~ Pod6::Text::FormatCode);
 
-    isa-ok @fcodes[0], Pod6::Text::FCode::I, "I<> code parsed as Pod6::Text::FCode::I";
-    isa-ok @fcodes[1], Pod6::Text::FCode::N, "N<> code parsed as Pod6::Text::FCode::N";
+    isa-ok @fcodes[0], Pod6::Text::FormatCode::I, "I<> code parsed as Pod6::Text::FormatCode::I";
+    isa-ok @fcodes[1], Pod6::Text::FormatCode::N, "N<> code parsed as Pod6::Text::FormatCode::N";
 }
 
 #### =finish
