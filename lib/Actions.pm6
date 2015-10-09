@@ -171,8 +171,6 @@ class Pod6::Actions {
     sub depreserve-text($parts) {
         my $newparts := nqp::list();
 
-        my $pidx := 0;
-
         for $parts.list -> $PART {
             if nqp::istype($PART, Pod6::Text::FormatCode) {
                 nqp::push($newparts, $PART);
@@ -192,8 +190,8 @@ class Pod6::Actions {
 
                 # do a trim if it's whitespace at the start or end of the
                 # collection, otherwise replace with a single space
-                if $pidx     == 0            && $ws-start == 0 ||
-                   $pidx + 1 == $parts.elems && $ws-end   == nqp::chars($newtext) {
+                if nqp::elems($newparts)     == 0            && $ws-start == 0 ||
+                   nqp::elems($newparts) + 1 == $parts.elems && $ws-end   == nqp::chars($newtext) {
                     $newtext := nqp::replace($newtext, $ws-start, $ws-end - $ws-start, "");
                 } else {
                     $newtext := nqp::replace($newtext, $ws-start, $ws-end - $ws-start, " ");
@@ -204,8 +202,6 @@ class Pod6::Actions {
             }
 
             nqp::push($newparts, $M.add_constant('Pod6::Text::Plain', 'type_new', $newtext));
-
-            $pidx := nqp::add_i($pidx, 1);
         }
 
         $newparts;
@@ -406,13 +402,16 @@ class Pod6::Actions {
     }
 
     method formatting_code:sym<D>($/) {
-        my $disptext := $<display> ?? $<display>.ast !! ~$<syn>[0];
+        my $disptext := $<display> ?? $<display>.ast !! nqp::list(Pod6::Text::Plain.new(~$<syn>[0]));
 
         my $syns := nqp::list();
 
         nqp::push($syns, ~$_) for $<syn>;
 
-        @*FORMAT_CODES[*-1].push($disptext);
+        my $dt := $disptext;
+        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
+        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
+
         @*FORMAT_CODES[*-1].set-term(@*FORMAT_CODES[*-1].text); # use plaintext version of display text
         @*FORMAT_CODES[*-1].set-synonyms(nqp::hllize($syns));
 
@@ -454,45 +453,53 @@ class Pod6::Actions {
     }
 
     method formatting_code:sym<LP>($/) {
-        my $disptext := $<display> ?? $<display>.ast !!
-                        nqp::concat(@*FORMAT_CODES[*-1].scheme, ~$<address>);
-
-        @*FORMAT_CODES[*-1].push($disptext);
-
         @*FORMAT_CODES[*-1].set-address(~$<address>);
+
+        my $disptext := $<display> ?? $<display>.ast !! nqp::list(Pod6::Text::Plain.new(@*FORMAT_CODES[*-1].link));
+
+        my $dt := $disptext;
+        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
+        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
 
         make nqp::pop(@*FORMAT_CODES);
     }
 
     method formatting_code:sym<M>($/) {
-        @*FORMAT_CODES[*-1].push($<text>.ast);
+        my $dt := $<text>.ast;
+        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
+        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
 
         make nqp::pop(@*FORMAT_CODES);
     }
 
     method formatting_code:sym<X>($/) {
         my $entries := nqp::list();
-        my $disptext := $<display> ?? $<display>.ast !! ~$<entry>[0]<main>;
+        my $disptext := $<display> ?? $<display>.ast !! nqp::list(Pod6::Text::Plain.new(~$<entry>[0]<main>));
 
         for $<entry> {
+            my $main := depreserve-text(nqp::list(Pod6::Text::Plain.new(~$_<main>)))[0].text;
             if $_<subent> {
                 my $selist := nqp::list();
 
-                nqp::push($selist, ~$_) for $_<subent>;
+                nqp::push($selist, depreserve-text(nqp::list(Pod6::Text::Plain.new(~$_)))[0].text) for $_<subent>;
 
-                @*FORMAT_CODES[*-1].add-subentry(~$_<main>, $selist);
+                @*FORMAT_CODES[*-1].add-subentry($main, $selist);
             } else {
-                @*FORMAT_CODES[*-1].add-entry(~$_<main>);
+                @*FORMAT_CODES[*-1].add-entry($main);
             }
         }
 
-        @*FORMAT_CODES[*-1].push($disptext);
+        my $dt := $disptext;
+        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
+        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
 
         make nqp::pop(@*FORMAT_CODES);
     }
 
     method formatting_code:sym<normal>($/) {
-        @*FORMAT_CODES[*-1].push($<contents>.ast);
+        my $dt := $<contents>.ast;
+        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
+        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
 
         make nqp::pop(@*FORMAT_CODES);
     }

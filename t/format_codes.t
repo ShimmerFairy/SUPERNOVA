@@ -125,7 +125,7 @@ isa-ok $FC, Pod6::Text::FormatCode::D, "D<<>> code is of type Pod6::Text::Format
 is $FC.text, "one more", "D<<>> has correct text";
 is $FC.term, $FC.text, "D<<>> has equal 'text' and 'term'";
 is $FC.synonyms.elems, 3, "D<<>> has three synonyms";
-is-deeply $FC.synonyms, «term "but with" "more synonyms"», "D<<>> has correct synonyms";
+is-deeply $FC.synonyms.List, «term "but with" "more synonyms"», "D<<>> has correct synonyms";
 
 ####
 #### E
@@ -259,7 +259,7 @@ is $FC.link, "doc:S26#head# Pod#Block    types#Lists", "L«» link is scheme + a
 # ::Doc specific
 is $FC.doc, "S26", "L«doc:...» specifies correct document";
 is $FC.inner-by, "head", "L«doc:...» internal address info specifies how to resolve said address";
-is-deeply $FC.inner, «Pod  "Block types"  Lists», "L«doc:...» correctly interpreted internal address (not space-preserved)";
+is-deeply $FC.inner.List, «Pod  "Block types"  Lists», "L«doc:...» correctly interpreted internal address (not space-preserved)";
 
 $FC = parse-fc("=para L<<more display|http://docs.perl6.org/type/Pod::Block#Methods>>");
 
@@ -515,7 +515,7 @@ isa-ok $FC, Pod6::Text::FormatCode::X, "X<<<>>> code is of type Pod6::Text::Form
 is $FC.text, "display", "X<<<>>> has correct display text";
 is $FC.entries.elems, 1, "X<<<>>> has one entry";
 ok $FC.entries{"entry 1"}:exists, "X<<<>>> entry has correct top-level name";
-is $FC.entries{"entry 1"}, "meaning of" => "first", "X<<<>>> entry has correct (non-space-preserved) subentries";
+is $FC.entries{"entry 1"}, "meaning of" => "first" => True, "X<<<>>> entry has correct (non-space-preserved) subentries";
 
 $FC = parse-fc("=para X««entry 1, subent; entry 2; entry 3»»");
 
@@ -523,7 +523,7 @@ isa-ok $FC, Pod6::Text::FormatCode::X, "X««»» code is of type Pod6::Text::Fo
 is $FC.text, "entry 1", "X««»» has the correct display text";
 is $FC.entries.elems, 3, "X««»» has three entries";
 ok $FC.entries{"entry 1"}:exists, "X««»» has correct first entry";
-is $FC.entries{"entry 1"}, "subent", "X««»» first entry has proper subentry";
+ok $FC.entries{"entry 1"}{"subent"}:exists, "X««»» first entry has proper subentry";
 ok $FC.entries{"entry 2"}:exists, "X««»» has correct second entry, non-space-preserved";
 ok $FC.entries{"entry 3"}:exists, "X««»» has correct third entry";
 

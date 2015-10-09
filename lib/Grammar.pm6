@@ -381,6 +381,8 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         <formatting_code> || \N
     }
 
+    token can_do_fc { <?{+@*FORMAT_CODES ?? @*FORMAT_CODES[*-1].allow-fc($*FC) !! @*POD_BLOCKS[*-1].allow-fc($*FC)}> }
+
     token fcode_open {
         [
         | ('<'+) { $*OPENER := $0.Str; $*CLOSER := '>' x $0.Str.chars }
@@ -421,6 +423,9 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         A
 
         :my $*FC = "A";
+
+        <.can_do_fc>
+
         :my $*OPENER;
         :my $*CLOSER;
 
@@ -438,6 +443,9 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         D
 
         :my $*FC = "D";
+
+        <.can_do_fc>
+
         :my $*OPENER;
         :my $*CLOSER;
 
@@ -448,7 +456,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
         [<display=fcode_inside> '|']?
 
-        $<syn>=[ [<![;]> <!before $*CLOSER> .]+ ] *% ';'
+        $<syn>=( [<![;]> <!before $*CLOSER> .]+ ) +% ';'
 
         <.fcode_close>
     }
@@ -457,6 +465,9 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         E
 
         :my $*FC = "E";
+
+        <.can_do_fc>
+
         :my $*OPENER;
         :my $*CLOSER;
 
@@ -480,6 +491,9 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         $<fcode>=[<[LP]>]
 
         :my $*FC; {$*FC = ~$<fcode>}
+
+        <.can_do_fc>
+
         :my $*OPENER;
         :my $*CLOSER;
 
@@ -500,6 +514,9 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         M
 
         :my $*FC = "M";
+
+        <.can_do_fc>
+
         :my $*OPENER;
         :my $*CLOSER;
         :my $*BALANCES = 0;
@@ -516,6 +533,9 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         X
 
         :my $*FC = "X";
+
+        <.can_do_fc>
+
         :my $*OPENER;
         :my $*CLOSER;
 
@@ -538,6 +558,9 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         $<fcode>=[<[BCIKNRSTUVZ]>]
 
         :my $*FC; {$*FC = ~$<fcode>}
+
+        <.can_do_fc>
+
         :my $*OPENER;
         :my $*CLOSER;
         :my $*BALANCES = 0;
