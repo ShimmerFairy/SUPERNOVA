@@ -176,6 +176,8 @@ class Pod6::Text::FormatCode::P does Pod6::Text::FormatCode {
 
     method scheme { fail "No scheme set for {self.^name}" }
     method link { self.scheme ~ ':' ~ self.address }
+
+    method text { die "Can't reproduce text yet" }
 }
 
 class Pod6::Text::FormatCode::Q does Pod6::Text::FormatCode::Reserved { }
