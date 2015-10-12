@@ -104,6 +104,9 @@ class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
 
 #| base role for formatting codes
 role Pod6::Text::FormatCode is Pod6::Text does Pod6::Children[Pod6::Text] {
+    method new(**@children, *%config) {
+        self.bless(:@children, :%config);
+    }
     method preserves-spaces { False }
     method verbatim-text { False }
 
@@ -140,7 +143,14 @@ class Pod6::Text::FormatCode::D does Pod6::Text::FormatCode {
     method set-synonyms(@s) { @!synonyms = @s».trim }
 }
 
-class Pod6::Text::FormatCode::E does Pod6::Text::FormatCode { }
+class Pod6::Text::FormatCode::E does Pod6::Text::FormatCode {
+    has $.text;
+
+    method new($text) {
+        self.bless(:$text);
+    }
+}
+
 class Pod6::Text::FormatCode::F does Pod6::Text::FormatCode::Reserved { }
 class Pod6::Text::FormatCode::G does Pod6::Text::FormatCode::Reserved { }
 class Pod6::Text::FormatCode::H does Pod6::Text::FormatCode::Reserved { }
@@ -154,7 +164,7 @@ class Pod6::Text::FormatCode::K does Pod6::Text::FormatCode {
 class Pod6::Text::FormatCode::L does Pod6::Text::FormatCode {
     has $.address;
 
-    method set-address($addr) { $!address = $addr }
+    method new($address) { self.bless(:$address) }
 
     method scheme { fail "No scheme set for {self.^name}" }
     method link { self.scheme ~ ':' ~ self.address }
@@ -174,7 +184,7 @@ class Pod6::Text::FormatCode::O does Pod6::Text::FormatCode::Reserved { }
 class Pod6::Text::FormatCode::P does Pod6::Text::FormatCode {
     has $.address;
 
-    method set-address($addr) { $!address = $addr }
+    method new($address) { self.bless(:$address) }
 
     method scheme { fail "No scheme set for {self.^name}" }
     method link { self.scheme ~ ':' ~ self.address }
@@ -204,11 +214,18 @@ class Pod6::Text::FormatCode::W does Pod6::Text::FormatCode::Reserved { }
 class Pod6::Text::FormatCode::X does Pod6::Text::FormatCode {
     has %.entries;
 
-    method add-entry($e) { %!entries{$e} = True }
-    method add-subentry($e, @se) {
-        my $new := %!entries{$e};
-        $new := $new{$_} for @se;
-        $new = True;
+    method new(@entries, **@children) {
+        my %ent;
+
+        for @entries {
+            if $_ ~~ Pair {
+                %ent{$_.key} = $_.value;
+            } else {
+                %ent{$_} = 1;
+            }
+        }
+
+        self.bless(:entries(%ent), :@children);
     }
 }
 
@@ -225,10 +242,15 @@ class Pod6::Text::FormatCode::L::Http is Pod6::Text::FormatCode::L {
     has $.internal = "";
     has $.external;
 
-    method set-address($a) {
-        ($!external, $!internal) = $a.split('#', 2);
-        $!external.=trim.subst(/\s+/," ", :g);
-        $!internal.=trim.subst(/\s+/," ", :g);
+    method new($address) {
+        my $internal;
+        my $external;
+
+        ($external, $internal) = $address.split('#', 2);
+        $external.=trim.subst(/\s+/," ", :g);
+        $internal.=trim.subst(/\s+/," ", :g);
+
+        self.bless(:$internal, :$external);
     }
 
     method scheme { "http" }
@@ -239,20 +261,23 @@ class Pod6::Text::FormatCode::L::Doc is Pod6::Text::FormatCode::L {
     has $.doc;
     has $.inner-by = "onehead";
     has @.inner;
-    has $!origaddr;
 
     # based on conjectural internal addressing
-    method set-address($a) {
-        $!origaddr = $a;
-        my @p = $a.split("#");
+    method new($address) {
+        my $doc;
+        my $inner-by;
+        my @inner;
 
-        $!doc = @p.shift;
-        $!inner-by = @p.shift.trim.subst(/\s+/," ", :g) if +@p > 1;
-        @!inner = @p.map: *.trim.subst(/\s+/, " ", :g);
+        my @p = $address.split("#");
+
+        $doc = @p.shift;
+        $inner-by = @p.shift.trim.subst(/\s+/," ", :g) if +@p > 1;
+        @inner = @p.map: *.trim.subst(/\s+/, " ", :g);
+
+        self.bless(:$address, :$doc, :$inner-by, :@inner);
     }
 
     method scheme { "doc" }
-    method address { $!origaddr }
 }
 
 #### Specialized P<> classes
@@ -261,10 +286,14 @@ class Pod6::Text::FormatCode::P::Http is Pod6::Text::FormatCode::P {
     has $.internal = "";
     has $.external;
 
-    method set-address($a) {
-        ($!external, $!internal) = $a.split('#', 2);
-        $!external.=trim.subst(/\s+/," ", :g);
-        $!internal.=trim.subst(/\s+/," ", :g);
+    method new($address) {
+        my $internal;
+        my $external;
+        ($external, $internal) = $address.split('#', 2);
+        $external.=trim.subst(/\s+/," ", :g);
+        $internal.=trim.subst(/\s+/," ", :g);
+
+        self.bless(:$internal, :$external);
     }
 
     method scheme { "http" }
@@ -277,16 +306,21 @@ class Pod6::Text::FormatCode::P::Doc is Pod6::Text::FormatCode::P {
     has @.inner;
 
     # based on conjectural internal addressing
-    method set-address($a) {
-        my @p = $a.split("#");
+    method new($address) {
+        my $doc;
+        my $inner-by;
+        my @inner;
 
-        $!doc = @p.shift;
-        $!inner-by = @p.shift if +@p > 1;
-        @!inner = @p;
+        my @p = $address.split("#");
+
+        $doc = @p.shift;
+        $inner-by = @p.shift.trim.subst(/\s+/," ", :g) if +@p > 1;
+        @inner = @p.map: *.trim.subst(/\s+/, " ", :g);
+
+        self.bless(:$address, :$doc, :$inner-by, :@inner);
     }
 
     method scheme { "doc" }
-    method address { self.doc ~ (+@!inner ?? '#' ~ ($!inner-by, |@!inner).join("#") !! "") }
 }
 
 class Pod6::Config { ... }

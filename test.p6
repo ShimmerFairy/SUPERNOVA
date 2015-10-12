@@ -5,10 +5,11 @@ use v6;
 use lib "lib/";
 use Grammar;
 use Actions;
+use World;
+
+my $*W = Earth.new;
 
 # TEMP TEST
-
-my $*FILENAME = "<internal-test>";
 
 my $testpod = q:to/NOTPOD/;
     =begin pod :!autotoc

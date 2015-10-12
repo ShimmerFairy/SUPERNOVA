@@ -6,120 +6,187 @@ use Pod6;
 
 use nqp;
 
-# TOCORE Just a fake world, since trying to interface with the real one is too
-# much of a pain.
-class FakeWorld {
-    method add_constant($typename, 'type_new', **@args, *%conf) {
-        my \a = ::($typename).new(|@args, |%conf);
-        a;
-    }
-
-    method find_symbol(@typename) { ::([~] @typename) }
-}
-
 # TOCORE every |nqp::hllize(...) should be just |...
 
-my $M = FakeWorld;
-
 class Pod6::Actions {
+    # head* and item* mean "any head/item". Starred configs are a fallback for
+    # un-config'd specifics
+    my %DEFAULTS := {
+        # default defaults (for custom blocks) -- the = ensures it can't be a valid
+        # block name
+        "=default" => { :!verbatim, :!keep-space, :implies-blocks },
+
+        # we explicitly give all the relevant values, even if !default would cover
+        # them -- saves having to decide to lookup in !default
+        "code"    => {  :verbatim,  :keep-space, :!implies-blocks },
+        "comment" => { :!verbatim, :!keep-space, :!implies-blocks },
+        "defn"    => { :!verbatim, :!keep-space,  :implies-blocks },
+        "head*"   => { :!verbatim, :!keep-space, :!implies-blocks },
+        "input"   => { :!verbatim,  :keep-space, :!implies-blocks },
+        "item*"   => { :!verbatim, :!keep-space,  :implies-blocks },
+        "nested"  => { :!verbatim, :!keep-space,  :implies-blocks },
+        "output"  => { :!verbatim,  :keep-space, :!implies-blocks },
+        "para"    => { :!verbatim, :!keep-space, :!implies-blocks },
+        "pod"     => { :!verbatim, :!keep-space,  :implies-blocks },
+        "table"   => { :!verbatim, :!keep-space, :!implies-blocks }, # NOTE =table ignores these
+        "data"    => { :!verbatim,  :keep-space, :!implies-blocks },
+        "finish"  => { :!verbatim, :!keep-space,  :implies-blocks },
+
+        "NAME"           => { :!verbatim, :!keep-space, :implies-blocks },
+        "AUTHOR"         => { :!verbatim, :!keep-space, :implies-blocks },
+        "VERSION"        => { :!verbatim, :!keep-space, :implies-blocks },
+        "CREATED"        => { :!verbatim, :!keep-space, :implies-blocks },
+        "EMULATES"       => { :!verbatim, :!keep-space, :implies-blocks },
+        "EXCLUDES"       => { :!verbatim, :!keep-space, :implies-blocks },
+        "SYNOPSIS"       => { :!verbatim, :!keep-space, :implies-blocks },
+        "DESCRIPTION"    => { :!verbatim, :!keep-space, :implies-blocks },
+        "USAGE"          => { :!verbatim, :!keep-space, :implies-blocks },
+        "INTERFACE"      => { :!verbatim, :!keep-space, :implies-blocks },
+        "METHOD"         => { :!verbatim, :!keep-space, :implies-blocks },
+        "SUBROUTINE"     => { :!verbatim, :!keep-space, :implies-blocks },
+        "OPTION"         => { :!verbatim, :!keep-space, :implies-blocks },
+        "DIAGNOSTIC"     => { :!verbatim, :!keep-space, :implies-blocks },
+        "ERROR"          => { :!verbatim, :!keep-space, :implies-blocks },
+        "WARNING"        => { :!verbatim, :!keep-space, :implies-blocks },
+        "DEPENDENCY"     => { :!verbatim, :!keep-space, :implies-blocks },
+        "BUG"            => { :!verbatim, :!keep-space, :implies-blocks },
+        "SEE-ALSO"       => { :!verbatim, :!keep-space, :implies-blocks },
+        "ACKNOWLEDGMENT" => { :!verbatim, :!keep-space, :implies-blocks },
+        "COPYRIGHT"      => { :!verbatim, :!keep-space, :implies-blocks },
+        "DISCLAIMER"     => { :!verbatim, :!keep-space, :implies-blocks },
+        "LICENSE"        => { :!verbatim, :!keep-space, :implies-blocks },
+        "TITLE"          => { :!verbatim, :!keep-space, :implies-blocks },
+        "SECTION"        => { :!verbatim, :!keep-space, :implies-blocks },
+        "CHAPTER"        => { :!verbatim, :!keep-space, :implies-blocks },
+        "APPENDIX"       => { :!verbatim, :!keep-space, :implies-blocks },
+        "TOC"            => { :!verbatim, :!keep-space, :implies-blocks },
+        "INDEX"          => { :!verbatim, :!keep-space, :implies-blocks },
+        "FOREWORD"       => { :!verbatim, :!keep-space, :implies-blocks },
+        "SUMMARY"        => { :!verbatim, :!keep-space, :implies-blocks },
+
+        # formatting codes
+
+        # A<> is the odd one out, since it's read more-or-less as a code snippet, so
+        # the standard config options don't apply. Not defined here for that reason.
+
+        "B<>" => { :!verbatim, :!keep-space },
+        "C<>" => {  :verbatim,  :keep-space },
+        "D<>" => { :!verbatim, :!keep-space },  # display text only
+        # E<> ignores config opts, since it parses specially
+        # F<> reserved
+        # G<> reserved
+        # H<> reserved
+        "I<>" => { :!verbatim, :!keep-space },
+        # J<> reserved
+        "K<>" => { :!verbatim,  :keep-space },
+        "L<>" => { :!verbatim, :!keep-space },  # display text only
+        "M<>" => {  :verbatim,  :keep-space },  # for all M<> codes; specifics as M<scheme>
+        "N<>" => { :!verbatim, :!keep-space },
+        # O<> reserved
+        "P<>" => { :!verbatim, :!keep-space },  # display text only (and only for L<> fallback)
+        # Q<> reserved
+        "R<>" => { :!verbatim, :!keep-space },
+        "S<>" => { :!verbatim,  :keep-space },
+        "T<>" => { :!verbatim,  :keep-space },
+        "U<>" => { :!verbatim, :!keep-space },
+        "V<>" => {  :verbatim, :!keep-space },
+        # W<> reserved
+        "X<>" => { :!verbatim, :!keep-space },  # display text only
+        # Y<> reserved
+        "Z<>" => { :!verbatim, :!keep-space },
+    };
     method start_document($/) {
-        nqp::push(@*POD_BLOCKS, $M.add_constant('Pod6::Document', 'type_new'));
-        @*POD_BLOCKS[0].push($M.add_constant('Pod6::Config', 'type_new'));
+        nqp::push(@*CONFIG_INFO, %DEFAULTS);
     }
 
-    method new_block($/) {
-        if nqp::istype($*BLOCK_NAME, Str) {
-            # this branch of the conditional is for the 'odd' directives, ones
-            # that aren't normal blocks.
+    method new_scope($/) {
+        nqp::push(@*CONFIG_INFO, @*CONFIG_INFO[*-1]);
 
-            if $*BLOCK_NAME eq 'config' {
-                nqp::push(@*POD_BLOCKS, $M.add_constant('Pod6::Config', 'type_new'));
-
-                @*POD_BLOCKS[*-1].inherit-config(@*POD_BLOCKS[*-2].last-config-block);
-
-                # for extra config lines
-                @*POD_BLOCKS[*-1].set-vmargin($*VMARGIN);
-            } elsif $*BLOCK_NAME eq 'encoding' {
-                nqp::push(@*POD_BLOCKS, $M.add_constant('Pod6::Encoding', 'type_new'));
-
-                @*POD_BLOCKS[*-1].set-vmargin($*VMARGIN);
-            } elsif $*BLOCK_NAME eq 'alias' {
-                nqp::push(@*POD_BLOCKS, $M.add_constant('Pod6::Alias', 'type_new'));
-            } else {
-                die "Unknown!";
-            }
-        } else { # a delimited/paragraph/abbreviated block
-            my $bname = $*BLOCK_NAME.ast;
-            my $sname = ~$_ with $*BLOCK_NAME<semantic_standard_name>;
-            my $level = 1 if $*BLOCK_NAME.Str eq 'item'; # only allow implicit level for =item
-
-            $level = +~$_ with $*BLOCK_NAME<standard_name><level>;
-
-            nqp::push(@*POD_BLOCKS,
-                      $M.add_constant($bname, 'type_new', :name($sname), :$level));
-
-            # set the vmargin for this block
-            @*POD_BLOCKS[*-1].set-vmargin($*VMARGIN);
-
-            # next up, figure out the name for which to find configuration, and
-            # push the last =config as the first child of this block.
-
-            my $confname = $sname ?? $sname !!
-                           $*BLOCK_NAME<standard_name> ?? ~$*BLOCK_NAME<standard_name> !!
-                           ~$*BLOCK_NAME<typename>;
-
-            @*POD_BLOCKS[*-1].push(@*POD_BLOCKS[*-2].last-config-block);
-
-            # finally, apply any relevant configuration options to this block.
-
-            my $opts := @*POD_BLOCKS[*-2].last-config-block.grab-config-for($confname);
-
-            @*POD_BLOCKS[*-1].set-config($opts);
-        }
+        %*THIS_CONFIG := $*W.pod_config_for_block($*BLOCK_NAME);
     }
 
-    method parent_block($/) {
-        my $child = nqp::pop(@*POD_BLOCKS);
-        @*POD_BLOCKS[*-1].push($child);
+    method finish_scope($/) {
+        nqp::pop(@*CONFIG_INFO);
     }
 
     method TOP($/) {
-        die +@*POD_BLOCKS unless +@*POD_BLOCKS == 1;
-        make @*POD_BLOCKS[0];
+        my $blocks := nqp::list();
+
+        for $<block> {
+            nqp::push($blocks, $_.ast);
+        }
+
+        make $*W.add_constant('Pod6::Document', 'type_new', |nqp::hllize($blocks));
     }
 
-    method block($/) { }
+    method block($/) { make $<directive>.ast }
 
-    method directive:sym<delim>($/) { }
+    method directive:sym<delim>($/) {
+        my $parts := nqp::list();
+        my $name := $<block_name><semantic_standard_name>
+                    ?? $*W.pod_normalize_block_name(~$<block_name><semantic_standard_name>)
+                    !! "";
+        my $level := $<block_name><standard_name><level>
+                     ?? +~$<block_name><standard_name><level>
+                     !! 1;
 
-    method directive:sym<para>($/) { }
+        for $<contents> {
+            if $_<block> {
+                nqp::push($parts, $_<block>.ast);
+            } elsif $_<pseudopara> {
+                nqp::push($parts, $_<pseudopara>.ast);
+            }
+        }
 
-    method directive:sym<abbr>($/) { }
+        make $*W.add_constant($<block_name>.ast, 'type_new', |nqp::hllize($parts), :$name, :$level);
+    }
+
+    method directive:sym<para>($/) {
+        my $name := $<block_name><semantic_standard_name>
+                    ?? $*W.pod_normalize_block_name(~$<block_name><semantic_standard_name>)
+                    !! "";
+        my $level := $<block_name><standard_name><level>
+                     ?? +~$<block_name><standard_name><level>
+                     !! 1;
+
+        if nqp::istype($<pseudopara>.ast, Pod6::Excerpt) {
+            make $*W.add_constant($<block_name>.ast, 'type_new', $<pseudopara>.ast, :$name, :$level);
+        } else {
+            make $*W.add_constant($<block_name>.ast, 'type_new', |$<pseudopara>.ast, :$name, :$level);
+        }
+    }
+
+    method directive:sym<abbr>($/) {
+        my $name := $<block_name><semantic_standard_name>
+                    ?? $*W.pod_normalize_block_name(~$<block_name><semantic_standard_name>)
+                    !! "";
+        my $level := $<block_name><standard_name><level>
+                     ?? +~$<block_name><standard_name><level>
+                     !! 1;
+
+        if nqp::istype($<pseudopara>.ast, Pod6::Excerpt) {
+            make $*W.add_constant($<block_name>.ast, 'type_new', $<pseudopara>.ast, :$name, :$level);
+        } else {
+            make $*W.add_constant($<block_name>.ast, 'type_new', |$<pseudopara>.ast, :$name, :$level);
+        }
+    }
 
     method directive:sym<encoding>($/) { }
     method directive:sym<alias>($/) { }
 
     method directive:sym<config>($/) {
-        my $options := $<configset>.ast;
-
-# XXX TOCORE 'make' hllizes stuff in P6, so this code doesn't work in P6.
-#        for $<extra_config_line> {
-#            for $_.ast {
-#                nqp::bindkey($options, nqp::iterkey_s($_), nqp::iterval($_));
-#            }
-#        }
-
-#        # TOCORE don't hllize
-#        $options = nqp::hllize($options);
-
-        for $<extra_config_line> {
-            $options{$_.key} = $_.value for $_.ast;
-        }
+        # TOCORE need to change for NQP; make hllizes the config asts.
 
         my $setfor = ~$<thing>;
 
-        for $options {
-            @*POD_BLOCKS[*-1].add-config($setfor, $_.key, $_.value);
+        for $<configset>.ast {
+            @*CONFIG_INFO[*-1]{$setfor}{$_.key} = $_.value;
+        }
+
+        for $<extra_config_line> {
+            for $_.ast {
+                @*CONFIG_INFO[*-1]{$setfor}{$_.key} = $_.value;
+            }
         }
     }
 
@@ -156,7 +223,7 @@ class Pod6::Actions {
             if nqp::istype($lines[*-1], Pod6::Text::Plain) {
                 $lines[*-1].append(~$_<end_line>);
             } else {
-                nqp::push($lines, $M.add_constant('Pod6::Text::Plain', 'type_new', ~$_<end_line>));
+                nqp::push($lines, $*W.add_constant('Pod6::Text::Plain', 'type_new', ~$_<end_line>));
             }
         }
 
@@ -201,7 +268,7 @@ class Pod6::Actions {
                                              $ws-start + 1, nqp::chars($newtext) - $ws-start - 1);
             }
 
-            nqp::push($newparts, $M.add_constant('Pod6::Text::Plain', 'type_new', $newtext));
+            nqp::push($newparts, $*W.add_constant('Pod6::Text::Plain', 'type_new', $newtext));
         }
 
         $newparts;
@@ -212,52 +279,46 @@ class Pod6::Actions {
         # TOCORE should be @lines
         my $lines := collect-lines($/);
 
-        @*POD_BLOCKS[*-1].push($M.add_constant('Pod6::Block::Code', 'type_new', @*POD_BLOCKS[*-1].last-config-block, |nqp::hllize($lines)));
-        @*POD_BLOCKS[*-1].set-config(@*POD_BLOCKS[*-1].last-config-block.grab-config-for('code'));
+        make $*W.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($lines));
     }
 
     method pseudopara:sym<implicit_para>($/) {
         my $parts := depreserve-text(collect-lines($/));
 
-        @*POD_BLOCKS[*-1].push($M.add_constant('Pod6::Block::Para', 'type_new', @*POD_BLOCKS[*-1].last-config-block, |nqp::hllize($parts)));
-        @*POD_BLOCKS[*-1].set-config(@*POD_BLOCKS[*-1].last-config-block.grab-config-for('para'));
+        make $*W.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($parts));
     }
 
     method pseudopara:sym<nothing_implied>($/) {
         my $lines := collect-lines($/);
 
-        $lines := depreserve-text($lines) unless @*POD_BLOCKS[*-1].preserves-spaces;
+        $lines := depreserve-text($lines) unless $*W.pod_preserve_spaces;
 
-        @*POD_BLOCKS[*-1].push(nqp::hllize($lines));
+        make nqp::hllize($lines);
     }
 
     method one_token_text($/) {
         if $<formatting_code> {
             make $<formatting_code>.ast;
         } else {
-            make $M.add_constant('Pod6::Text::Plain', 'type_new', ~$/);
+            make $*W.add_constant('Pod6::Text::Plain', 'type_new', ~$/);
         }
     }
 
     method block_config($/) {
-        my $options := nqp::hash();
-
-# TOCORE probably needs changing, P6 hllizes asts
+        # TOCORE probably needs changing, P6 hllizes asts
         with $<configset> {
             for $<configset>.ast {
-                nqp::bindkey($options, $_.key, $_.value);
+                %*THIS_CONFIG{$_.key} = $_.value;
             }
         }
 
         with $<extra_config_line> {
             for $<extra_config_line> {
                 for $_.ast {
-                    nqp::bindkey($options, $_.key, $_.value);
+                    %*THIS_CONFIG{$_.key} = $_.value;
                 }
             }
         }
-
-        @*POD_BLOCKS[*-1].add-to-config(nqp::hllize($options));
     }
 
     method configset($/) {
@@ -333,33 +394,10 @@ class Pod6::Actions {
     }
 
     method fcode_open($/) {
-        my $name := nqp::concat('Pod6::Text::FormatCode::', $*FC);
-        my $conf := @*POD_BLOCKS[*-1].last-config-block.grab-config-for($*FC ~ '<>');
-
-        nqp::push(@*FORMAT_CODES, $M.add_constant($name, 'type_new'));
-        @*FORMAT_CODES[*-1].set-config($conf);
+        %*THIS_CONFIG := $*W.pod_config_for_format_code($*FC);
     }
 
-    method fcode_scheme($/) {
-        # in this case, we now know what class to really use
-        my $old := nqp::pop(@*FORMAT_CODES);
-
-        my $newname := nqp::concat($old.^name, '::');
-        $newname := nqp::concat($newname, (~$/).trim.tclc);
-
-        nqp::push(@*FORMAT_CODES, $M.add_constant($newname, 'type_new', |$old.list, |$old.hash));
-    }
-
-    # the default scheme, for L<> only, is doc: (should only be left out for
-    # sections, the grammar side of this checks that)
-    method fcode_def_scheme($/) {
-        my $old := nqp::pop(@*FORMAT_CODES);
-
-        my $newname := nqp::concat($old.^name, '::');
-        $newname := nqp::concat($newname, 'Doc');
-
-        nqp::push(@*FORMAT_CODES, $M.add_constant($newname, 'type_new', |$old.list, |$old.hash));
-    }
+    method fcode_scheme($/) { make (~$/).tclc }
 
     method fcode_inside($/) {
         my $parts := nqp::list();
@@ -371,7 +409,7 @@ class Pod6::Actions {
                 if nqp::elems($parts) && nqp::istype($parts[*-1], Pod6::Text::Plain) {
                     $parts[*-1].append(~$_<one>);
                 } else {
-                    nqp::push($parts, $M.add_constant('Pod6::Text::Plain', 'type_new', ~$_<one>));
+                    nqp::push($parts, $*W.add_constant('Pod6::Text::Plain', 'type_new', ~$_<one>));
                 }
             } elsif $_<fcode_inside> {
                 for $_<fcode_inside>.ast {
@@ -412,14 +450,14 @@ class Pod6::Actions {
         # (and thus also main term)
         nqp::shift($syns) unless $<display>;
 
-        my $dt := $disptext;
-        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
-        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
+        $disptext := depreserve-text($disptext) unless $*W.pod_preserve_spaces;
 
-        @*FORMAT_CODES[*-1].set-term(@*FORMAT_CODES[*-1].text); # use plaintext version of display text
-        @*FORMAT_CODES[*-1].set-synonyms(nqp::hllize($syns));
+        my $fc := $*W.find_symbol(['Pod6', 'Text', 'FormatCode', 'D']).new(|nqp::hllize($disptext));
 
-        make nqp::pop(@*FORMAT_CODES);
+        $fc.set-term($fc.text);
+        $fc.set-synonyms(nqp::hllize($syns));
+
+        make $*W.add_object($fc); # XXX use a function that does the post-creation parts of add_constant?
     }
 
     method formatting_code:sym<E>($/) {
@@ -451,60 +489,74 @@ class Pod6::Actions {
             }
         }
 
-        @*FORMAT_CODES[*-1].push($convchars);
-
-        make nqp::pop(@*FORMAT_CODES);
+        make $*W.add_constant('Pod6::Text::FormatCode::E', 'type_new', $convchars);
     }
 
     method formatting_code:sym<LP>($/) {
-        @*FORMAT_CODES[*-1].set-address(~$<address>);
+        # use the scheme if it was found, or else default to doc (for L<>) or
+        # die (for P<>).
+        my $scheme := $<fcode_scheme> ?? $<fcode_scheme>.ast !!
+                      ~$<fcode> eq "L" ?? "Doc" !! die "EGADS!";
 
-        my $disptext := $<display> ?? $<display>.ast !! nqp::list(Pod6::Text::Plain.new(@*FORMAT_CODES[*-1].link));
+        my $fc := $*W.find_symbol(['Pod6', 'Text', 'FormatCode', ~$<fcode>, $scheme.trim.tclc]).new(~$<address>);
+        my $PlainText := $*W.find_symbol(['Pod6', 'Text', 'Plain']);
+        my $disptext := $<display> ?? $<display>.ast !! nqp::list($PlainText.new($fc.link));
 
-        my $dt := $disptext;
-        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
-        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
+        $disptext := depreserve-text($disptext) unless $*W.pod_preserve_spaces;
 
-        make nqp::pop(@*FORMAT_CODES);
+        $fc.push(|nqp::hllize($disptext));
+
+        make $*W.add_object($fc); # XXX maybe not add_object?
     }
 
     method formatting_code:sym<M>($/) {
         my $dt := $<text>.ast;
-        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
-        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
+        $dt := depreserve-text($dt) unless $*W.pod_preserve_spaces;
 
-        make nqp::pop(@*FORMAT_CODES);
+        make $*W.add_constant(nqp::concat('Pod6::Text::FormatCode::M::', $<fcode_scheme>.ast),
+                             'type_new', |nqp::hllize($dt));
     }
 
     method formatting_code:sym<X>($/) {
+        my $PlainText := $*W.find_symbol(['Pod6', 'Text', 'Plain']);
+        my $Pair := $*W.find_symbol(['Pair']);
         my $entries := nqp::list();
-        my $disptext := $<display> ?? $<display>.ast !! nqp::list(Pod6::Text::Plain.new(~$<entry>[0]<main>));
+
+        my $disptext := $<display> ?? $<display>.ast !! nqp::list($PlainText.new(~$<entry>[0]<main>));
+        $disptext := depreserve-text($disptext) unless $*W.pod_preserve_spaces;
 
         for $<entry> {
-            my $main := depreserve-text(nqp::list(Pod6::Text::Plain.new(~$_<main>)))[0].text;
+            my $main := depreserve-text(nqp::list($PlainText.new(~$_<main>)))[0].text;
             if $_<subent> {
                 my $selist := nqp::list();
+                my $pairing := 1;
 
-                nqp::push($selist, depreserve-text(nqp::list(Pod6::Text::Plain.new(~$_)))[0].text) for $_<subent>;
+                for $_<subent> {
+                    # we want to process $selist 'in reverse', so use unshift
+                    # instead of push
+                    nqp::unshift($selist, ~$_);
+                }
 
-                @*FORMAT_CODES[*-1].add-subentry($main, $selist);
+                # XXX TOCORE no hllize
+                for nqp::hllize($selist) {
+                    $pairing := $Pair.new($_, $pairing);
+                }
+
+                $pairing := $Pair.new($main, $pairing);
+
+                nqp::push($entries, $pairing);
             } else {
-                @*FORMAT_CODES[*-1].add-entry($main);
+                nqp::push($entries, $main);
             }
         }
 
-        my $dt := $disptext;
-        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
-        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
-
-        make nqp::pop(@*FORMAT_CODES);
+        make $*W.add_constant('Pod6::Text::FormatCode::X', 'type_new', nqp::hllize($entries), |nqp::hllize($disptext));
     }
 
     method formatting_code:sym<normal>($/) {
         my $dt := $<contents>.ast;
-        $dt := depreserve-text($dt) if !@*FORMAT_CODES[*-1].preserves-spaces;
-        @*FORMAT_CODES[*-1].push(|nqp::hllize($dt));
+        $dt := depreserve-text($dt) unless $*W.pod_preserve_spaces;
 
-        make nqp::pop(@*FORMAT_CODES);
+        make $*W.add_constant(nqp::concat('Pod6::Text::FormatCode::', ~$<fcode>), 'type_new', |nqp::hllize($dt));
     }
 }

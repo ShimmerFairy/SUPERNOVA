@@ -5,6 +5,9 @@ use Test;
 
 use Grammar;
 use Actions;
+use World;
+
+my $*W = Earth.new;
 
 plan 396;
 
@@ -24,12 +27,11 @@ sub test-block($n) {
 
     isa-ok $ast, Pod6::Document, "$n block returns a Pod6::Document ast";
 
-    isa-ok $ast[1], Pod6::Block::SEMANTIC, "$n block comes as Pod6::Block::SEMANTIC";
-    is $ast[1].name, $n, "$n block has right name";
+    isa-ok $ast[0], Pod6::Block::SEMANTIC, "$n block comes as Pod6::Block::SEMANTIC";
+    is $ast[0].name, $n, "$n block has right name";
 
-    isa-ok $ast[1][0], Pod6::Config, "$n block gets initial configuration block";
-    isa-ok $ast[1][1], Pod6::Block::Para, "$n block implied =para";
-    isa-ok $ast[1][2], Pod6::Block::Code, "$n block implied =code";
+    isa-ok $ast[0][0], Pod6::Block::Para, "$n block implied =para";
+    isa-ok $ast[0][1], Pod6::Block::Code, "$n block implied =code";
 }
 
 <NAME            NAMES

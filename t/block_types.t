@@ -25,23 +25,19 @@ sub isa-nok($test, $expect, $msg) { ok !$test.isa($expect), $msg }
 
 use Grammar;
 use Actions;
+use World;
 
-# XXX remove soon
-my $*FILENAME = "bleh";
+my $*W = Earth.new;
 
-plan 120;
+plan 103;
 
 #?DOES 1
 sub parse-block($s) {
     my $a = Pod6::Grammar.parse($s, :actions(Pod6::Actions)).ast;
 
     isa-ok $a, Pod6::Document, "AST is a Pod6::Document";
-    $a[1];
+    $a[0];
 }
-
-# quick note: notice that we test if block *didn't* imply something. To test
-# that a block *doesn't* imply something, we need to test the class itself,
-# which belongs in a separate test file.
 
 #### =code
 
@@ -51,9 +47,8 @@ my $code = parse-block(qq:to/END_CODE/);
     END_CODE
 
 isa-ok $code, Pod6::Block::Code, "=code produces a Pod6::Block::Code object";
-isa-ok $code[0], Pod6::Config, "=code gets an initial Pod6::Config object";
-isa-nok $code[1], Pod6::Block::Para, "=code didn't imply =para";
-isa-nok $code[1], Pod6::Block::Code, "=code didn't imply =code";
+isa-nok $code[0], Pod6::Block::Para, "=code didn't imply =para";
+isa-nok $code[0], Pod6::Block::Code, "=code didn't imply =code";
 
 is $code.text, qq:to/END_TEST_CODE/, "=code is space-preserved";
     space  preservation
@@ -73,18 +68,17 @@ my $comment = parse-block(q:to/END_COMMENT/);
     END_COMMENT
 
 isa-ok $comment, Pod6::Block::Comment, "=comment produces a Pod6::Block::Comment object";
-isa-ok $comment[0], Pod6::Config, "=comment gets an initial Pod6::Config object";
-isa-nok $comment[1], Pod6::Block::Para, "=comment didn't imply =para";
-isa-nok $comment[1], Pod6::Block::Code, "=comment didn't imply =code";
+isa-nok $comment[0], Pod6::Block::Para, "=comment didn't imply =para";
+isa-nok $comment[0], Pod6::Block::Code, "=comment didn't imply =code";
 
 is $comment.text, "no space preservation should happen in this.", "=comment isn't space-preserved";
 
 $comment = parse-block("=comment B<Formatting> codes are I<parsed>.");
 
-ok $code.list.any ~~ Pod6::Text::FormatCode, "=comment isn't verbatim (parses format codes)";
+ok $comment.list.any ~~ Pod6::Text::FormatCode, "=comment isn't verbatim (parses format codes)";
 
 {
-    my @fcodes = $code.list.grep(* ~~ Pod6::Text::FormatCode);
+    my @fcodes = $comment.list.grep(* ~~ Pod6::Text::FormatCode);
 
     isa-ok @fcodes[0], Pod6::Text::FormatCode::B, "B<> code parsed as a Pod6::Text::FormatCode::B";
     isa-ok @fcodes[1], Pod6::Text::FormatCode::I, "I<> code parsed as a Pod6::Text::FormatCode::I";
@@ -98,8 +92,7 @@ my $defn = parse-block(q:to/END_DEFN/);
     END_DEFN
 
 isa-ok $defn, Pod6::Block::Defn, "=defn produces a Pod6::Block::Defn object";
-isa-ok $defn[0], Pod6::Config, "=defn gets an initial Pod6::Config object";
-isa-ok $defn[1], Pod6::Block::Para, "=defn did imply =para";
+isa-ok $defn[0], Pod6::Block::Para, "=defn did imply =para";
 
 skip("defn.term NYI", 2);
 #ok $defn.term, "=defn stores the term line separately";
@@ -112,8 +105,7 @@ $defn = parse-block(q:to/END_DEFN/);
     END_DEFN
 
 isa-ok $defn, Pod6::Block::Defn, "=defn with code blocks still produces a Pod6::Block::Defn";
-isa-ok $defn[0], Pod6::Config, "=defn with code blocks still gets an initial config";
-isa-ok $defn[1], Pod6::Block::Code, "=defn did imply =code";
+isa-ok $defn[0], Pod6::Block::Code, "=defn did imply =code";
 
 skip("defn.term NYI", 1);
 #isa-ok $defn.term, Pod6::Block::Code, "=defn term is stored as a code block";
@@ -126,9 +118,8 @@ my $head = parse-block(q:to/END_HEAD/);
     END_HEAD
 
 isa-ok $head, Pod6::Block::Head, "=head1 produces a Pod6::Block::Head object";
-isa-ok $head[0], Pod6::Config, "=head1 gets an initial Pod6::Config object";
-isa-nok $head[1], Pod6::Block::Para, "=head1 didn't imply =para";
-isa-nok $head[1], Pod6::Block::Code, "=head1 didn't imply =code";
+isa-nok $head[0], Pod6::Block::Para, "=head1 didn't imply =para";
+isa-nok $head[0], Pod6::Block::Code, "=head1 didn't imply =code";
 
 is $head.level, 1, "=head1 is set at level 1";
 is $head.text, "my heading not space-preserved, hopefully.", "=head1 isn't space-preserved";
@@ -154,9 +145,8 @@ my $input = parse-block(q:to/END_INPUT/);
     END_INPUT
 
 isa-ok $input, Pod6::Block::Input, "=input produces a Pod6::Block::Input object";
-isa-ok $input[0], Pod6::Config, "=input gets an initial Pod6::Config object";
-isa-nok $input[1], Pod6::Block::Para, "=input didn't imply =para";
-isa-nok $input[1], Pod6::Block::Code, "=input didn't imply =code";
+isa-nok $input[0], Pod6::Block::Para, "=input didn't imply =para";
+isa-nok $input[0], Pod6::Block::Code, "=input didn't imply =code";
 
 is $input.text, q:to/END_TEST_INPUT/, "=input is space-preserved";
     This is some input,
@@ -182,8 +172,7 @@ my $item = parse-block(q:to/END_ITEM/);
     END_ITEM
 
 isa-ok $item, Pod6::Block::Item, "=item produces a Pod6::Block::Item object";
-isa-ok $item[0], Pod6::Config, "=item gets an initial Pod6::Config object";
-isa-ok $item[1], Pod6::Block::Para, "=item did imply =para";
+isa-ok $item[0], Pod6::Block::Para, "=item did imply =para";
 
 is $item.level, 1, "=item is set at level 1";
 
@@ -194,8 +183,7 @@ $item = parse-block(q:to/END_ITEM/);
     END_ITEM
 
 isa-ok $item, Pod6::Block::Item, "=item5 with code block produces a Pod6::Block::Item object";
-isa-ok $item[0], Pod6::Config, "=item5 with code block gets an initial Pod6::Config object";
-isa-ok $item[1], Pod6::Block::Code, "=item5 did imply =code";
+isa-ok $item[0], Pod6::Block::Code, "=item5 did imply =code";
 
 is $item.level, 5, "=item5 is set at level 5";
 
@@ -207,8 +195,7 @@ my $nested = parse-block(q:to/END_NESTED/);
     END_NESTED
 
 isa-ok $nested, Pod6::Block::Nested, "=nested produces a Pod6::Block::Nested object";
-isa-ok $nested[0], Pod6::Config, "=nested gets an initial Pod6::Config object";
-isa-ok $nested[1], Pod6::Block::Para, "=nested did imply =para";
+isa-ok $nested[0], Pod6::Block::Para, "=nested did imply =para";
 
 $nested = parse-block(q:to/END_NESTED/);
     =nested
@@ -217,8 +204,7 @@ $nested = parse-block(q:to/END_NESTED/);
     END_NESTED
 
 isa-ok $nested, Pod6::Block::Nested, "=nested with code block produces a Pod6::Block::Nested object";
-isa-ok $nested[0], Pod6::Config, "=nested with code block gets an initial Pod6::Config object";
-isa-ok $nested[1], Pod6::Block::Code, "=nested did imply =code";
+isa-ok $nested[0], Pod6::Block::Code, "=nested did imply =code";
 
 #### =output
 
@@ -229,9 +215,8 @@ my $output = parse-block(q:to/END_OUTPUT/);
     END_OUTPUT
 
 isa-ok $output, Pod6::Block::Output, "=output produces a Pod6::Block::Output object";
-isa-ok $output[0], Pod6::Config, "=output gets an initial Pod6::Config object";
-isa-nok $output[1], Pod6::Block::Para, "=output didn't imply =para";
-isa-nok $output[1], Pod6::Block::Code, "=output didn't imply =code";
+isa-nok $output[0], Pod6::Block::Para, "=output didn't imply =para";
+isa-nok $output[0], Pod6::Block::Code, "=output didn't imply =code";
 
 is $output.text, q:to/END_TEST_OUTPUT/, "=output is space-preserved";
     A non-implicit-using block
@@ -258,9 +243,8 @@ my $para = parse-block(q:to/END_PARA/);
     END_PARA
 
 isa-ok $para, Pod6::Block::Para, "=para produces a Pod6::Block::Para object";
-isa-ok $para[0], Pod6::Config, "=para gets an initial Pod6::Config object";
-isa-nok $para[1], Pod6::Block::Para, "=para didn't imply =para";
-isa-nok $para[1], Pod6::Block::Code, "=para didn't imply =code";
+isa-nok $para[0], Pod6::Block::Para, "=para didn't imply =para";
+isa-nok $para[0], Pod6::Block::Code, "=para didn't imply =code";
 
 is $para.text, "A bare paragraph, implies nothing but still no space preservation.", "=para doesn't preserve spaces";
 
@@ -269,7 +253,7 @@ $para = parse-block("=para And of course, I<all> formatting codes allowed in a R
 ok $para.list.any ~~ Pod6::Text::FormatCode, "=para allows formatting codes";
 
 {
-    my @fcodes = $output.list.grep(* ~~ Pod6::Text::FormatCode);
+    my @fcodes = $para.list.grep(* ~~ Pod6::Text::FormatCode);
 
     isa-ok @fcodes[0], Pod6::Text::FormatCode::I, "I<> code parsed as Pod6::Text::FormatCode::I";
     isa-ok @fcodes[1], Pod6::Text::FormatCode::R, "R<> code parsed as Pod6::Text::FormatCode::R";
@@ -282,8 +266,7 @@ my $pod = parse-block(q:to/END_POD/);
     END_POD
 
 isa-ok $pod, Pod6::Block::Pod, "=pod produces a Pod6::Block::Pod object";
-isa-ok $pod[0], Pod6::Config, "=pod gets an initial Pod6::Config object";
-isa-ok $pod[1], Pod6::Block::Para, "=pod did imply =para";
+isa-ok $pod[0], Pod6::Block::Para, "=pod did imply =para";
 
 $pod = parse-block(q:to/END_POD/);
     =pod
@@ -291,8 +274,7 @@ $pod = parse-block(q:to/END_POD/);
     END_POD
 
 isa-ok $pod, Pod6::Block::Pod, "=pod with a code block produces a Pod6::Block::Pod object";
-isa-ok $pod[0], Pod6::Config, "=pod with a code block gets an initial Pod6::Config object";
-isa-ok $pod[1], Pod6::Block::Code, "=pod did imply =code";
+isa-ok $pod[0], Pod6::Block::Code, "=pod did imply =code";
 
 #### =table would be here, if not in a separate file
 
@@ -305,7 +287,6 @@ my $data = parse-block(q:to/END_DATA/);
     END_DATA
 
 isa-ok $data, Pod6::Block::Data, "=data produces a Pod6::Block::Data object";
-isa-ok $data[0], Pod6::Config, "=data gets an initial Pod6::Config object";
 isa-nok $data[0], Pod6::Block::Para, "=data didn't imply =para";
 isa-nok $data[0], Pod6::Block::Code, "=data didn't imply =code";
 
@@ -341,8 +322,7 @@ my $finish = parse-block(q:to/END_FINISH/);
     END_FINISH
 
 isa-ok $finish, Pod6::Block::Finish, "=finish produces a Pod6::Block::Finish object";
-isa-ok $finish[0], Pod6::Config, "=finish gets an initial Pod6::Config object";
-isa-ok $finish[1], Pod6::Block::Para, "=finish did imply =para";
+isa-ok $finish[0], Pod6::Block::Para, "=finish did imply =para";
 
 $finish = parse-block(q:to/END_FINISH/);
     =finish
@@ -350,8 +330,7 @@ $finish = parse-block(q:to/END_FINISH/);
     END_FINISH
 
 isa-ok $finish, Pod6::Block::Finish, "=finish with code block produces a Pod6::Block::Finish object";
-isa-ok $finish[0], Pod6::Config, "=finish with code block gets an initial Pod6::Config object";
-isa-ok $finish[1], Pod6::Block::Code, "=finish did imply =code";
+isa-ok $finish[0], Pod6::Block::Code, "=finish did imply =code";
 
 ## testing the special EOF-only behavior of =finish
 

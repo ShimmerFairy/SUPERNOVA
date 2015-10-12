@@ -28,9 +28,12 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         :my @*POD_BLOCKS := nqp::list();
         :my @*FORMAT_CODES := nqp::list();
 
-        :my $*LAST_BEGIN;
+        :my @*CONFIG_INFO := nqp::list(); # for =config options
 
-        :my $*VMARGIN;
+        :my @*MARGINS := nqp::list();
+        :my $*CODE_MARGIN; # for implied code blocks
+
+        :my $*LAST_BEGIN;
 
         <.start_document>
 
@@ -70,22 +73,26 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     method prime_line($margin) {
-        $*VMARGIN = numify-margin($margin);
+        nqp::push(@*MARGINS, $margin);
+        self;
+    }
+
+    method unprime_line {
+        nqp::pop(@*MARGINS);
         self;
     }
 
     method prime_code_line($margin) {
-        my $size = numify-margin($margin);
-        @*POD_BLOCKS[*-1].set-cvmargin($size);
+        $*CODE_MARGIN := $margin;
         self;
     }
 
     token start_line {
-        ^^ " " ** { @*POD_BLOCKS[*-1].get-margin() }
+        ^^ " " ** { @*MARGINS[*-1] }
     }
 
     token start_code_line {
-        ^^ " " ** { @*POD_BLOCKS[*-1].get-margin() + @*POD_BLOCKS[*-1].get-code-margin() }
+        ^^ " " ** { @*MARGINS[*-1] + $*CODE_MARGIN }
     }
 
     token end_line {
@@ -102,18 +109,25 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
     token end_non_delim { <.blank_or_eof> | <?before <.new_directive>> }
 
-    token new_block { <?> }
+    # stuff dealing with configs
 
-    token parent_block { <?> }
+    token new_scope { <?> }
+
+    token finish_scope { <?> }
 
     # high-level block handling
 
     token block {
+        :my $*BLOCK_NAME;
+        :my %*THIS_CONFIG; # for the particular block's configuration. Allows
+                           # one-shot configs without extra headache.
+
         ^^ $<litmargin>=(\h*) <?before <new_directive>>
-        {self.prime_line(~$<litmargin>)}
+        {self.prime_line(nqp::chars(~$<litmargin>))}
 
         <directive>
-        <.parent_block>
+
+        {self.unprime_line}
     }
 
     proto token directive {*}
@@ -121,7 +135,10 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     multi token directive:sym<delim> {
         "=begin" <.ws> # XXX want :: here
             <block_name> <.ws>
-            :my $*BLOCK_NAME; {$*BLOCK_NAME := $<block_name>} <.new_block>
+
+        {$*BLOCK_NAME := ~$<block_name>}
+
+        <.new_scope>
 
         <.block_config>
 
@@ -137,23 +154,33 @@ grammar Pod6::Grammar is Grammar::Parsefail {
                                    || <badname=.block_name> {$<badname>.CURSOR.typed_panic(X::Pod6::MismatchedEnd, HINT-MATCH => $/)}
                                    ] <.ws> <.end_line>
         {$*LAST_BEGIN = $/} # for hints on extraneous =end blocks
+
+        <.finish_scope>
     }
 
     multi token directive:sym<para> {
         "=for" <.ws> # XXX want :: here
             <block_name> <.ws>
-            :my $*BLOCK_NAME; {$*BLOCK_NAME := $<block_name>} <.new_block>
+
+        {$*BLOCK_NAME := ~$<block_name>}
+
+        <.new_scope>
 
         <.block_config>
 
         <.start_line> <pseudopara>
 
         <.end_non_delim>
+
+        <.finish_scope>
     }
 
     multi token directive:sym<abbr> {
         \= <!not_name> <block_name> <.ws>
-            :my $*BLOCK_NAME; {$*BLOCK_NAME := $<block_name>} <.new_block>
+
+        {$*BLOCK_NAME := ~$<block_name>}
+
+        <.new_scope>
 
         # implied code blocks can only start on the next line, since only there
         # can we check for indentation. However, since we eat up all the
@@ -163,11 +190,12 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         [<.end_line> <.start_line>]? <pseudopara>
 
         <.end_non_delim>
+
+        <.finish_scope>
     }
 
     multi token directive:sym<encoding> {
         "=encoding" <.ws> #`(::)
-        :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("encoding")} <.new_block>
         $<encoding>=[\N+ <.end_line>
             [<!blank_or_eof> <.start_line> \N+ <.end_line>]*]
 
@@ -178,7 +206,6 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
     multi token directive:sym<alias> {
         "=alias" <.ws> <AVal=.p6ident> <.ws>
-        :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("alias")} <.new_block>
         [<.end_line> {$¢.typed_panic(X::Pod6::Alias, atype => "Contextual")}]?
 
         \N+ {$¢.typed_sorry(X::Pod6::Alias, atype => "Macro")}
@@ -187,7 +214,6 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
     multi token directive:sym<config> {
         "=config" <.ws> #`(::)
-        :my $*BLOCK_NAME; {$*BLOCK_NAME := shim-unbox_s("config")} <.new_block>
         $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
         <configset> <.end_line>
         <extra_config_line>*
@@ -261,7 +287,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         | CHAPTERS?
         | APPENDI[X|CES]
         | TOCS?
-        | IND[EX|ICES]
+        | IND[EX[ES]? | ICES]  # both 'indexes' and 'indices' are valid plurals
         | FOREWORDS?
         | SUMMAR[Y|IES]
     }
@@ -347,30 +373,32 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
     proto token pseudopara {*}
     multi token pseudopara:sym<implicit_code> {
-        <?{@*POD_BLOCKS[*-1].implies-code()}> (\h+) # probably want ::
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
 
-        {self.prime_code_line(~$0)}
+        <?{$*W.pod_imply_blocks}> (\h+)
 
+        {
+            self.prime_code_line(nqp::chars(~$0));
+            %*THIS_CONFIG := $*W.pod_config_for_block("code");
+        }
 
         <!before <.end_non_delim>> $<line>=(<one_token_text>+ <end_line>)
         [<!before <.end_non_delim>> <.start_code_line> $<line>=(<one_token_text>+ <end_line>)]*
     }
 
     multi token pseudopara:sym<implicit_para> {
-        <?{@*POD_BLOCKS[*-1].implies-para()}>
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
 
-        # we can accept indented stuff, _if_ code blocks can't be implicit here
-        [<!{@*POD_BLOCKS[*-1].implies-code()}> \h* | <!before \h>]
+        <?{$*W.pod_imply_blocks}> <!before \h>
 
-        # probably want ::
+        { %*THIS_CONFIG := $*W.pod_config_for_block("para"); }
 
         <!before <.end_non_delim>> $<line>=(<one_token_text>+ <end_line>)
         [<!before <.end_non_delim>> <.start_line> $<line>=(<one_token_text>+ <end_line>)]*
     }
 
     multi token pseudopara:sym<nothing_implied> {
-        # probably not needed when :: used on the other multis
-        <!{@*POD_BLOCKS[*-1].implies-code() || @*POD_BLOCKS[*-1].implies-para()}>
+        <!{$*W.pod_imply_blocks}>
 
         <!before <.end_non_delim>> $<line>=(<one_token_text>+ <end_line>)
         [<!before <.end_non_delim>> <.start_line> $<line>=(<one_token_text>+ <end_line>)]*
@@ -380,8 +408,6 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         <formatting_code> || \N
     }
 
-    token can_do_fc { <?{+@*FORMAT_CODES ?? @*FORMAT_CODES[*-1].allow-fc($*FC) !! @*POD_BLOCKS[*-1].allow-fc($*FC)}> }
-
     token fcode_open {
         [
         | ('<'+) { $*OPENER := $0.Str; $*CLOSER := '>' x $0.Str.chars }
@@ -390,8 +416,6 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     token fcode_scheme { <( [<![:]> <!before $*CLOSER> .]+ )> ':' }
-
-    token fcode_def_scheme { <?{$*FC eq 'L'}> <?before '#'> }
 
     token fcode_inside {
         [ <!before $*CLOSER> [<?{$*PIPE_END}> <![|]> || <!{$*PIPE_END}>]
@@ -419,12 +443,12 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     proto token formatting_code {*}
 
     multi token formatting_code:sym<A> {
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
         A
 
-        :my $*FC = "A";
+        <?{$*W.pod_allow_format_code('A')}>
 
-        <.can_do_fc>
-
+        :my $*FC := 'A';
         :my $*OPENER;
         :my $*CLOSER;
 
@@ -439,11 +463,12 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token formatting_code:sym<D> {
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
         D
 
-        :my $*FC = "D";
+        <?{$*W.pod_allow_format_code('D')}>
 
-        <.can_do_fc>
+        :my $*FC := 'D';
 
         :my $*OPENER;
         :my $*CLOSER;
@@ -461,11 +486,12 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token formatting_code:sym<E> {
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
         E
 
-        :my $*FC = "E";
+        <?{$*W.pod_allow_format_code('E')}>
 
-        <.can_do_fc>
+        :my $*FC := 'E';
 
         :my $*OPENER;
         :my $*CLOSER;
@@ -488,11 +514,12 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token formatting_code:sym<LP> {
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
         $<fcode>=[<[LP]>]
 
         :my $*FC; {$*FC = ~$<fcode>}
 
-        <.can_do_fc>
+        <?{$*W.pod_allow_format_code($*FC)}>
 
         :my $*OPENER;
         :my $*CLOSER;
@@ -504,18 +531,19 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
         [<display=fcode_inside> '|']?
 
-        [ <.fcode_scheme> || <.fcode_def_scheme> ]
+        [ <fcode_scheme> | <?{$*FC eq 'L'}> <?before '#'> ]
         $<address>=[[<!before $*CLOSER> .]+]
 
         <.fcode_close>
     }
 
     multi token formatting_code:sym<M> {
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
         M
 
-        :my $*FC = "M";
+        <?{$*W.pod_allow_format_code('M')}>
 
-        <.can_do_fc>
+        :my $*FC := 'M';
 
         :my $*OPENER;
         :my $*CLOSER;
@@ -523,18 +551,19 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
         <.fcode_open>
 
-        <.fcode_scheme>
+        <fcode_scheme>
         <text=fcode_inside>
 
         <.fcode_close>
     }
 
     multi token formatting_code:sym<X> {
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
         X
 
-        :my $*FC = "X";
+        <?{$*W.pod_allow_format_code('X')}>
 
-        <.can_do_fc>
+        :my $*FC := 'X';
 
         :my $*OPENER;
         :my $*CLOSER;
@@ -555,11 +584,13 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token formatting_code:sym<normal> {
+        :my %*THIS_CONFIG := nqp::getlexdyn('%*THIS_CONFIG');
+
         $<fcode>=[<[BCIKNRSTUVZ]>]
 
-        :my $*FC; {$*FC = ~$<fcode>}
+        :my $*FC; { $*FC := ~$<fcode> }
 
-        <.can_do_fc>
+        <?{$*W.pod_allow_format_code($*FC)}>
 
         :my $*OPENER;
         :my $*CLOSER;
@@ -574,7 +605,8 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
     multi token formatting_code:sym<reserved> {
         $<fcode>=[<[FGHJOQWY]>] <?before <[<«]>>
-        :my $*FC; {$*FC = ~$<fcode>} <.can_do_fc>
+
+        <?{$*W.pod_allow_format_code(~$<fcode>)}>
 
         {$¢.typed_sorry(X::Pod6::FormatCode::ReservedCode, culprit => ~$<fcode>)}
     }

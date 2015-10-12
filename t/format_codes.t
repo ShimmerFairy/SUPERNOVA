@@ -5,6 +5,9 @@ use Test;
 
 use Grammar;
 use Actions;
+use World;
+
+my $*W = Earth.new;
 
 #?DOES 2
 sub parse-fc($pod) {
@@ -12,11 +15,11 @@ sub parse-fc($pod) {
 
     isa-ok $a, Pod6::Document, "Returned AST is a Pod6::Document";
 
-    $a = $a[1];
+    $a = $a[0];
 
     isa-ok $a, Pod6::Block::Para, "Returned Document has just a Pod6::Block::Para";
 
-    $a[1];
+    $a[0];
 }
 
 my $FC;
@@ -34,7 +37,7 @@ $FC = Pod6::Grammar.parse(q:to/END_A/, :actions(Pod6::Actions));
 
 isa-ok $FC, Pod6::Document, "Returned AST is a Pod6::Document";
 
-$FC = $FC[2][1]; # get code inside =para
+$FC = $FC[1][0]; # get code inside =para
 
 isa-ok $FC, Pod6::Text::FormatCode::A, "A<> code is of type Pod6::Text::FormatCode::A";
 is $FC.text, "BAR", "A<> code is substituted correctly";
@@ -45,7 +48,7 @@ $FC = Pod6::Grammar.parse(q:to/END_A/, :actions(Pod6::Actions));
     =para A«B<foo>»
     END_A
 
-$FC = $FC[2][1];
+$FC = $FC[1][0];
 
 isa-ok $FC, Pod6::Text::FormatCode::A, "A«» code is of type Pod6::Text::FormatCode::A";
 is $FC.text, "RIGHT", "A«» code is verbatim, and doesn't parse formatting codes";
