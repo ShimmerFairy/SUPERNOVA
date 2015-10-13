@@ -446,7 +446,17 @@ class Pod6::Block::SEMANTIC is Pod6::Block {
 
     multi method gist(Pod6::Block::SEMANTIC:D:) {
         my $gist = "Pod6::Block::SEMANTIC - $!name\n";
-        $gist ~= self.gist-children().indent(4);
+
+        if self.gist-config {
+            $gist ~= "Configuration:\n".indent(2);
+            $gist ~= self.gist-config.indent(4) ~ "\n";
+        }
+
+        if self.gist-children {
+            $gist ~= "Children:\n".indent(2);
+            $gist ~= self.gist-children.indent(4) ~ "\n";
+        }
+
         $gist.chomp;
     }
 

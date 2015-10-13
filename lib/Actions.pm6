@@ -139,7 +139,7 @@ class Pod6::Actions {
         }
 
         make $*W.add_constant($<block_name>.ast, 'type_new', $*TERM_LINE, |nqp::hllize($parts),
-                              :$name, :$level, :term($*TERM_LINE));
+                              :$name, :$level, :term($*TERM_LINE), :config(%*THIS_CONFIG));
     }
 
     method directive:sym<para>($/) {
@@ -152,10 +152,10 @@ class Pod6::Actions {
 
         if nqp::istype($<pseudopara>.ast, Pod6::Excerpt) {
             make $*W.add_constant($<block_name>.ast, 'type_new', $*TERM_LINE, $<pseudopara>.ast,
-                                  :$name, :$level, :term($*TERM_LINE));
+                                  :$name, :$level, :term($*TERM_LINE), :config(%*THIS_CONFIG));
         } else {
             make $*W.add_constant($<block_name>.ast, 'type_new', $*TERM_LINE, |$<pseudopara>.ast,
-                                  :$name, :$level, :term($*TERM_LINE));
+                                  :$name, :$level, :term($*TERM_LINE), :config(%*THIS_CONFIG));
         }
     }
 
@@ -169,10 +169,10 @@ class Pod6::Actions {
 
         if nqp::istype($<pseudopara>.ast, Pod6::Excerpt) {
             make $*W.add_constant($<block_name>.ast, 'type_new', $<pseudopara>.ast,
-                                  :$name, :$level, :term($*TERM_LINE));
+                                  :$name, :$level, :term($*TERM_LINE), :config(%*THIS_CONFIG));
         } else {
             make $*W.add_constant($<block_name>.ast, 'type_new', |$<pseudopara>.ast,
-                                  :$name, :$level, :term($*TERM_LINE));
+                                  :$name, :$level, :term($*TERM_LINE), :config(%*THIS_CONFIG));
         }
     }
 
@@ -298,10 +298,10 @@ class Pod6::Actions {
 
         if $*BLOCK_NAME eq 'defn' {
             $*TERM_LINE := depreserve-text($*TERM_LINE) unless $*W.pod_preserve_spaces;
-            $*TERM_LINE := $*W.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($*TERM_LINE));
+            $*TERM_LINE := $*W.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($*TERM_LINE), :config(%*THIS_CONFIG));
         }
 
-        make $*W.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($lines));
+        make $*W.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($lines), :config(%*THIS_CONFIG));
     }
 
     method pseudopara:sym<implicit_para>($/) {
@@ -310,10 +310,10 @@ class Pod6::Actions {
 
         if $*BLOCK_NAME eq 'defn' {
             $*TERM_LINE := depreserve-text($*TERM_LINE) unless $*W.pod_preserve_spaces;
-            $*TERM_LINE := $*W.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($*TERM_LINE));
+            $*TERM_LINE := $*W.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($*TERM_LINE), :config(%*THIS_CONFIG));
         }
 
-        make $*W.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($parts));
+        make $*W.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($parts), :config(%*THIS_CONFIG));
     }
 
     method pseudopara:sym<nothing_implied>($/) {
@@ -484,7 +484,7 @@ class Pod6::Actions {
 
         $disptext := depreserve-text($disptext) unless $*W.pod_preserve_spaces;
 
-        my $fc := $*W.find_symbol(['Pod6', 'Text', 'FormatCode', 'D']).new(|nqp::hllize($disptext));
+        my $fc := $*W.find_symbol(['Pod6', 'Text', 'FormatCode', 'D']).new(|nqp::hllize($disptext), :config(%*THIS_CONFIG));
 
         $fc.set-term($fc.text);
         $fc.set-synonyms(nqp::hllize($syns));
@@ -521,7 +521,7 @@ class Pod6::Actions {
             }
         }
 
-        make $*W.add_constant('Pod6::Text::FormatCode::E', 'type_new', $convchars);
+        make $*W.add_constant('Pod6::Text::FormatCode::E', 'type_new', $convchars, :config(%*THIS_CONFIG));
     }
 
     method formatting_code:sym<LP>($/) {
@@ -530,7 +530,7 @@ class Pod6::Actions {
         my $scheme := $<fcode_scheme> ?? $<fcode_scheme>.ast !!
                       ~$<fcode> eq "L" ?? "Doc" !! die "EGADS!";
 
-        my $fc := $*W.find_symbol(['Pod6', 'Text', 'FormatCode', ~$<fcode>, $scheme.trim.tclc]).new(~$<address>);
+        my $fc := $*W.find_symbol(['Pod6', 'Text', 'FormatCode', ~$<fcode>, $scheme.trim.tclc]).new(~$<address>, :config(%*THIS_CONFIG));
         my $PlainText := $*W.find_symbol(['Pod6', 'Text', 'Plain']);
         my $disptext := $<display> ?? $<display>.ast !! nqp::list($PlainText.new($fc.link));
 
@@ -546,7 +546,7 @@ class Pod6::Actions {
         $dt := depreserve-text($dt) unless $*W.pod_preserve_spaces;
 
         make $*W.add_constant(nqp::concat('Pod6::Text::FormatCode::M::', $<fcode_scheme>.ast),
-                             'type_new', |nqp::hllize($dt));
+                             'type_new', |nqp::hllize($dt), :config(%*THIS_CONFIG));
     }
 
     method formatting_code:sym<X>($/) {
@@ -582,13 +582,13 @@ class Pod6::Actions {
             }
         }
 
-        make $*W.add_constant('Pod6::Text::FormatCode::X', 'type_new', nqp::hllize($entries), |nqp::hllize($disptext));
+        make $*W.add_constant('Pod6::Text::FormatCode::X', 'type_new', nqp::hllize($entries), |nqp::hllize($disptext), :config(%*THIS_CONFIG));
     }
 
     method formatting_code:sym<normal>($/) {
         my $dt := $<contents>.ast;
         $dt := depreserve-text($dt) unless $*W.pod_preserve_spaces;
 
-        make $*W.add_constant(nqp::concat('Pod6::Text::FormatCode::', ~$<fcode>), 'type_new', |nqp::hllize($dt));
+        make $*W.add_constant(nqp::concat('Pod6::Text::FormatCode::', ~$<fcode>), 'type_new', |nqp::hllize($dt), :config(%*THIS_CONFIG));
     }
 }

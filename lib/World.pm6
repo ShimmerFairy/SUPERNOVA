@@ -104,7 +104,7 @@ class Earth {
         # the odd do {} block is because NQP doesn't have any array-search ops
         !self.pod_verbatim_text || (
             %*THIS_CONFIG<allow> ??
-            do { my $a := 0; $a := 1 if $_ eq $code for %*THIS_CONFIG<allow>; $a } !!
+            do { my $a := 0; $a := 1 if $_ eq $code for %*THIS_CONFIG<allow>[]; $a } !!
             False
         )
     }
