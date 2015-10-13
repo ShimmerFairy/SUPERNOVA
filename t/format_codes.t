@@ -518,7 +518,7 @@ isa-ok $FC, Pod6::Text::FormatCode::X, "X<<<>>> code is of type Pod6::Text::Form
 is $FC.text, "display", "X<<<>>> has correct display text";
 is $FC.entries.elems, 1, "X<<<>>> has one entry";
 ok $FC.entries{"entry 1"}:exists, "X<<<>>> entry has correct top-level name";
-is $FC.entries{"entry 1"}, "meaning of" => "first" => True, "X<<<>>> entry has correct (non-space-preserved) subentries";
+is $FC.entries{"entry 1"}, "meaning of" => "first" => 1, "X<<<>>> entry has correct (non-space-preserved) subentries";
 
 $FC = parse-fc("=para X««entry 1, subent; entry 2; entry 3»»");
 

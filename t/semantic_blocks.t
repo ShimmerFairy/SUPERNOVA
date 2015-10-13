@@ -9,61 +9,64 @@ use World;
 
 my $*W = Earth.new;
 
-plan 396;
+plan 330;
 
 # since the semantic blocks all behave the same, it's easy to test
 # programmatically.
 
 #?DOES 3
 sub test-block($n) {
-    my $ast = Pod6::Grammar.parse(qq:to/END_BLOCK/, :actions(Pod6::Actions)).ast;
-        =begin $n
-        This is a test of a semantic block.   This should be seen as an implicit
-        para.
+    my $main = $n.key;
+    my @names = $main, |$n.value;
 
-            And this is supposed to be a code block.   Hope it is!
-        =end $n
-        END_BLOCK
+    for @names {
+        my $ast = Pod6::Grammar.parse(qq:to/END_BLOCK/, :actions(Pod6::Actions)).ast;
+            =begin $_
+            This is a test of a semantic block.   This should be seen as an
+            implicit para.
 
-    isa-ok $ast, Pod6::Document, "$n block returns a Pod6::Document ast";
+                And this is supposed to be a code block.   Hope it is!
+            =end $_
+            END_BLOCK
 
-    isa-ok $ast[0], Pod6::Block::SEMANTIC, "$n block comes as Pod6::Block::SEMANTIC";
-    is $ast[0].name, $n, "$n block has right name";
+            isa-ok $ast, Pod6::Document, "$_ block returns a Pod6::Document ast";
 
-    isa-ok $ast[0][0], Pod6::Block::Para, "$n block implied =para";
-    isa-ok $ast[0][1], Pod6::Block::Code, "$n block implied =code";
+            isa-ok $ast[0], Pod6::Block::SEMANTIC, "$_ block comes as Pod6::Block::SEMANTIC";
+            is $ast[0].name, $main, "$_ block has right name";
+
+            isa-ok $ast[0][0], Pod6::Block::Para, "$_ block implied =para";
+            isa-ok $ast[0][1], Pod6::Block::Code, "$_ block implied =code";
+    }
 }
 
-<NAME            NAMES
- AUTHOR          AUTHORS
- VERSION         VERSIONS
- CREATED         CREATEDS
- EMULATES        EMULATESES
- EXCLUDES        EXCLUDESES
- SYNOPSIS        SYNOPSES
- DESCRIPTION     DESCRIPTIONS
- USAGE           USAGES
- INTERFACE       INTERFACES
- METHOD          METHODS
- SUBROUTINE      SUBROUTINES
- OPTION          OPTIONS
- DIAGNOSTIC      DIAGNOSTICS
- ERROR           ERRORS
- WARNING         WARNINGS
- DEPENDENCY      DEPENDENCIES
- BUG             BUGS
- SEE-ALSO        SEE-ALSOS
- ACKNOWLEDGMENT  ACKNOWLEDGMENTS
- ACKNOWLEDGEMENT ACKNOWLEDGEMENTS
- COPYRIGHT       COPYRIGHTS
- DISCLAIMER      DISCLAIMERS
- LICENCE         LICENCES
- LICENSE         LICENSES
- TITLE           TITLES
- SECTION         SECTIONS
- CHAPTER         CHAPTERS
- APPENDIX        APPENDICES
- TOC             TOCS
- INDEX           INDICES
- FOREWORD        FOREWORDS
- SUMMARY         SUMMARIES>.map: { test-block($_) };
+{NAME           => "NAMES",
+ AUTHOR         => "AUTHORS",
+ VERSION        => "VERSIONS",
+ CREATED        => "CREATEDS",
+ EMULATES       => "EMULATESES",
+ EXCLUDES       => "EXCLUDESES",
+ SYNOPSIS       => "SYNOPSES",
+ DESCRIPTION    => "DESCRIPTIONS",
+ USAGE          => "USAGES",
+ INTERFACE      => "INTERFACES",
+ METHOD         => "METHODS",
+ SUBROUTINE     => "SUBROUTINES",
+ OPTION         => "OPTIONS",
+ DIAGNOSTIC     => "DIAGNOSTICS",
+ ERROR          => "ERRORS",
+ WARNING        => "WARNINGS",
+ DEPENDENCY     => "DEPENDENCIES",
+ BUG            => "BUGS",
+ SEE-ALSO       => "SEE-ALSOS",
+ ACKNOWLEDGMENT => ("ACKNOWLEDGMENTS", "ACKNOWLEDGEMENT", "ACKNOWLEDGEMENTS"),
+ COPYRIGHT      => "COPYRIGHTS",
+ DISCLAIMER     => "DISCLAIMERS",
+ LICENSE        => ("LICENSES", "LICENCE", "LICENCES"),
+ TITLE          => "TITLES",
+ SECTION        => "SECTIONS",
+ CHAPTER        => "CHAPTERS",
+ APPENDIX       => "APPENDICES",
+ TOC            => "TOCS",
+ INDEX          => "INDICES",
+ FOREWORD       => "FOREWORDS",
+ SUMMARY        => "SUMMARIES"}.map: { test-block($_) };

@@ -5,7 +5,7 @@
 class Pod6::Excerpt does Associative {
     has %.config;
 
-    method new(*%config) {
+    method new(:%config) {
         self.bless(:%config);
     }
 
@@ -88,7 +88,7 @@ class Pod6::Text is Pod6::Excerpt { }
 
 #| plain text in a block
 class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
-    method new(*@children, *%config) {
+    method new(:%config, *@children) {
         self.bless(:@children, :%config);
     }
 
@@ -104,7 +104,7 @@ class Pod6::Text::Plain is Pod6::Text does Pod6::Children[Str] {
 
 #| base role for formatting codes
 role Pod6::Text::FormatCode is Pod6::Text does Pod6::Children[Pod6::Text] {
-    method new(**@children, *%config) {
+    method new(:%config, **@children) {
         self.bless(:@children, :%config);
     }
     method preserves-spaces { False }
@@ -149,6 +149,11 @@ class Pod6::Text::FormatCode::E does Pod6::Text::FormatCode {
     method new($text) {
         self.bless(:$text);
     }
+
+    # XXX apparently declaring a public attribute isn't enough when doing a role
+    # that has this method. (Still declared public because that's what we want,
+    # and to avoid needing a custom BUILD).
+    method text { $!text }
 }
 
 class Pod6::Text::FormatCode::F does Pod6::Text::FormatCode::Reserved { }
@@ -219,9 +224,17 @@ class Pod6::Text::FormatCode::X does Pod6::Text::FormatCode {
 
         for @entries {
             if $_ ~~ Pair {
-                %ent{$_.key} = $_.value;
+                my $cur_e := %ent;
+                my $p = $_;
+
+                while $p !=== 1 {
+                    $cur_e := $cur_e{$p.key.trim};
+                    $p = $p.value;
+                }
+
+                $cur_e = 1;
             } else {
-                %ent{$_} = 1;
+                %ent{$_.trim} = 1;
             }
         }
 
@@ -331,7 +344,7 @@ class Pod6::Block is Pod6::Excerpt does Pod6::Children {
     has $.vmargin = 0;
     has $.cvmargin = 0;
 
-    method new(*@children, *%config) {
+    method new(:%config, *@children) {
         self.bless(:@children, :%config);
     }
 
@@ -365,14 +378,17 @@ class Pod6::Block::Code is Pod6::Block {
 class Pod6::Block::Comment is Pod6::Block { }
 
 class Pod6::Block::Defn is Pod6::Block {
-    method implies-code { True }
-    method implies-para { True }
+    has $.term;
+
+    method new(:%config, :$term, *@children) {
+        self.bless(:$term, :%config, :@children);
+    }
 }
 
 class Pod6::Block::Head is Pod6::Block {
     has $.level;
 
-    method new(:$level!, *@children, *%config) {
+    method new(:$level!, :%config, *@children) {
         self.bless(:$level, :@children, :%config);
     }
 }
@@ -384,7 +400,7 @@ class Pod6::Block::Input is Pod6::Block {
 class Pod6::Block::Item is Pod6::Block {
     has $.level;
 
-    method new(:$level = 1, *@children, *%config) {
+    method new(:$level = 1, :%config, *@children) {
         self.bless(:$level, :@children, :%config);
     }
 
@@ -424,7 +440,7 @@ class Pod6::Block::Finish is Pod6::Block {
 class Pod6::Block::SEMANTIC is Pod6::Block {
     has $.name;
 
-    method new(:$name, *@children, *%config) {
+    method new(:$name, :%config, *@children) {
         self.bless(:$name, :@children, :%config);
     }
 
@@ -440,7 +456,7 @@ class Pod6::Block::SEMANTIC is Pod6::Block {
 
 #| A custom block (isn't Pod6::Block, that's for standard types)
 class Pod6::MBlock is Pod6::Excerpt does Pod6::Children {
-    method new(*@children, *%config) {
+    method new(:%config, *@children) {
         self.bless(:@children, :%config);
     }
 

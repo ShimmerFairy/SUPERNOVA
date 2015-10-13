@@ -138,7 +138,8 @@ class Pod6::Actions {
             }
         }
 
-        make $*W.add_constant($<block_name>.ast, 'type_new', |nqp::hllize($parts), :$name, :$level);
+        make $*W.add_constant($<block_name>.ast, 'type_new', $*TERM_LINE, |nqp::hllize($parts),
+                              :$name, :$level, :term($*TERM_LINE));
     }
 
     method directive:sym<para>($/) {
@@ -150,9 +151,11 @@ class Pod6::Actions {
                      !! 1;
 
         if nqp::istype($<pseudopara>.ast, Pod6::Excerpt) {
-            make $*W.add_constant($<block_name>.ast, 'type_new', $<pseudopara>.ast, :$name, :$level);
+            make $*W.add_constant($<block_name>.ast, 'type_new', $*TERM_LINE, $<pseudopara>.ast,
+                                  :$name, :$level, :term($*TERM_LINE));
         } else {
-            make $*W.add_constant($<block_name>.ast, 'type_new', |$<pseudopara>.ast, :$name, :$level);
+            make $*W.add_constant($<block_name>.ast, 'type_new', $*TERM_LINE, |$<pseudopara>.ast,
+                                  :$name, :$level, :term($*TERM_LINE));
         }
     }
 
@@ -165,9 +168,11 @@ class Pod6::Actions {
                      !! 1;
 
         if nqp::istype($<pseudopara>.ast, Pod6::Excerpt) {
-            make $*W.add_constant($<block_name>.ast, 'type_new', $<pseudopara>.ast, :$name, :$level);
+            make $*W.add_constant($<block_name>.ast, 'type_new', $<pseudopara>.ast,
+                                  :$name, :$level, :term($*TERM_LINE));
         } else {
-            make $*W.add_constant($<block_name>.ast, 'type_new', |$<pseudopara>.ast, :$name, :$level);
+            make $*W.add_constant($<block_name>.ast, 'type_new', |$<pseudopara>.ast,
+                                  :$name, :$level, :term($*TERM_LINE));
         }
     }
 
@@ -206,7 +211,7 @@ class Pod6::Actions {
 
     sub collect-lines($/) {
         my $lines := nqp::list();
-
+        my $lineno := 0;
         for $<line> {
             for $_<one_token_text> {
                 if nqp::istype($_.ast, Pod6::Text::Plain) && nqp::elems($lines) &&
@@ -224,6 +229,17 @@ class Pod6::Actions {
                 $lines[*-1].append(~$_<end_line>);
             } else {
                 nqp::push($lines, $*W.add_constant('Pod6::Text::Plain', 'type_new', ~$_<end_line>));
+            }
+
+            $lineno := nqp::add_i($lineno, 1);
+
+            # if we're in a =defn, then take the first line for the term (this
+            # is the least painful place to do this, for those curious.)
+            if $lineno == 1 && $*BLOCK_NAME eq 'defn' {
+                $*TERM_LINE := nqp::list();
+                while nqp::elems($lines) {
+                    nqp::push($*TERM_LINE, nqp::shift($lines));
+                }
             }
         }
 
@@ -278,20 +294,36 @@ class Pod6::Actions {
     method pseudopara:sym<implicit_code>($/) {
         # TOCORE should be @lines
         my $lines := collect-lines($/);
+        $lines := depreserve-text($lines) unless $*W.pod_preserve_spaces;
+
+        if $*BLOCK_NAME eq 'defn' {
+            $*TERM_LINE := depreserve-text($*TERM_LINE) unless $*W.pod_preserve_spaces;
+            $*TERM_LINE := $*W.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($*TERM_LINE));
+        }
 
         make $*W.add_constant('Pod6::Block::Code', 'type_new', |nqp::hllize($lines));
     }
 
     method pseudopara:sym<implicit_para>($/) {
         my $parts := depreserve-text(collect-lines($/));
+        $parts := depreserve-text($parts) unless $*W.pod_preserve_spaces;
+
+        if $*BLOCK_NAME eq 'defn' {
+            $*TERM_LINE := depreserve-text($*TERM_LINE) unless $*W.pod_preserve_spaces;
+            $*TERM_LINE := $*W.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($*TERM_LINE));
+        }
 
         make $*W.add_constant('Pod6::Block::Para', 'type_new', |nqp::hllize($parts));
     }
 
     method pseudopara:sym<nothing_implied>($/) {
         my $lines := collect-lines($/);
-
         $lines := depreserve-text($lines) unless $*W.pod_preserve_spaces;
+
+        if $*BLOCK_NAME eq 'defn' {
+            $*TERM_LINE := depreserve-text($*TERM_LINE) unless $*W.pod_preserve_spaces;
+            $*TERM_LINE := nqp::hllize($*TERM_LINE);
+        }
 
         make nqp::hllize($lines);
     }

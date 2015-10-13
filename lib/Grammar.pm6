@@ -119,6 +119,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
 
     token block {
         :my $*BLOCK_NAME;
+        :my $*TERM_LINE; # for =defn
         :my %*THIS_CONFIG; # for the particular block's configuration. Allows
                            # one-shot configs without extra headache.
 

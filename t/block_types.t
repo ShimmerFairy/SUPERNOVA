@@ -94,9 +94,8 @@ my $defn = parse-block(q:to/END_DEFN/);
 isa-ok $defn, Pod6::Block::Defn, "=defn produces a Pod6::Block::Defn object";
 isa-ok $defn[0], Pod6::Block::Para, "=defn did imply =para";
 
-skip("defn.term NYI", 2);
-#ok $defn.term, "=defn stores the term line separately";
-#isa-ok $defn.term, Pod6::Block::Para, "=defn term is stored as a paragraph";
+ok $defn.term, "=defn stores the term line separately";
+isa-ok $defn.term, Pod6::Block::Para, "=defn term is stored as a paragraph";
 
 $defn = parse-block(q:to/END_DEFN/);
     =defn
@@ -107,8 +106,7 @@ $defn = parse-block(q:to/END_DEFN/);
 isa-ok $defn, Pod6::Block::Defn, "=defn with code blocks still produces a Pod6::Block::Defn";
 isa-ok $defn[0], Pod6::Block::Code, "=defn did imply =code";
 
-skip("defn.term NYI", 1);
-#isa-ok $defn.term, Pod6::Block::Code, "=defn term is stored as a code block";
+isa-ok $defn.term, Pod6::Block::Code, "=defn term is stored as a code block";
 
 #### =head*
 
