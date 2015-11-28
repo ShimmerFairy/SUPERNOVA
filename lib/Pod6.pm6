@@ -434,8 +434,8 @@ class Pod6::Block::Finish is Pod6::Block {
     method implies-para { True }
 }
 
-#| A semantic block (XXX maybe we want these separated by class, but we'd really
-#| want a macro to make all those classes for us, since they all behave
+#| A semantic block (XXX we likely want these separated by class, but we'd
+#| really want a macro to make all those classes for us, since they all behave
 #| fundamentally the same)
 class Pod6::Block::SEMANTIC is Pod6::Block {
     has $.name;

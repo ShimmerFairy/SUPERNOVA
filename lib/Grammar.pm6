@@ -134,8 +134,8 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     proto token directive {*}
 
     multi token directive:sym<delim> {
-        "=begin" <.ws> # XXX want :: here
-            <block_name> <.ws>
+        "=begin" <.ws> {} # XXX want :: here
+            <!before table> <block_name> <.ws>
 
         {$*BLOCK_NAME := ~$<block_name>}
 
@@ -160,7 +160,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token directive:sym<para> {
-        "=for" <.ws> # XXX want :: here
+        "=for" <.ws> {} # XXX want :: here
             <block_name> <.ws>
 
         {$*BLOCK_NAME := ~$<block_name>}
@@ -177,7 +177,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token directive:sym<abbr> {
-        \= <!not_name> <block_name> <.ws>
+        \= {} <!not_name> <block_name> <.ws>
 
         {$*BLOCK_NAME := ~$<block_name>}
 
@@ -196,7 +196,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token directive:sym<encoding> {
-        "=encoding" <.ws> #`(::)
+        "=encoding" {} <.ws> #`(::)
         $<encoding>=[\N+ <.end_line>
             [<!blank_or_eof> <.start_line> \N+ <.end_line>]*]
 
@@ -206,7 +206,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token directive:sym<alias> {
-        "=alias" <.ws> <AVal=.p6ident> <.ws>
+        "=alias" {} <.ws> <AVal=.p6ident> <.ws>
         [<.end_line> {$¢.typed_panic(X::Pod6::Alias, atype => "Contextual")}]?
 
         \N+ {$¢.typed_sorry(X::Pod6::Alias, atype => "Macro")}
@@ -214,7 +214,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token directive:sym<config> {
-        "=config" <.ws> #`(::)
+        "=config" {} <.ws> #`(::)
         $<thing>=[<.block_name>|<[A..Z]> "<>"] <.ws>
         <configset> <.end_line>
         <extra_config_line>*
@@ -222,7 +222,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
     }
 
     multi token directive:sym<end> {
-        "=end" <.ws> <block_name> #`(::)
+        "=end" {} <.ws> <block_name> #`(::)
         {
             if $*LAST_BEGIN {
                 $¢.typed_panic(X::Pod6::ExtraEnd, HINT-MATCH => $*LAST_BEGIN);
@@ -230,6 +230,734 @@ grammar Pod6::Grammar is Grammar::Parsefail {
                 $¢.typed_panic(X::Pod6::ExtraEnd);
             }
         }
+    }
+
+    multi token directive:sym<table_delim> {
+        '=begin' <.ws> table {} <.ws> { $*BLOCK_NAME := "table" }
+        <.new_scope>
+        <.block_config>
+
+        <table> # don't start_line before this, unlike other directives, since
+                # it's not really necessary here.
+
+        # catch any trailing blank lines
+        <.blank_line>*
+
+        <.start_line> '=end' <.ws> 'table' <.end_line>
+
+        <.finish_scope>
+    }
+
+    token start_table_line {
+        { $*STARTLINE := $¢.pos; $*ATCOL := 0; }
+        <.start_line>
+    }
+
+    method record_colpos {
+        # this comes after a column, account for that with the -1
+        nqp::push(@*COLPOSLIST, self.pos - 1 - $*STARTLINE);
+        self;
+    }
+
+    token check_before_colpos {
+#        { say $*STARTLINE, "---", @*COLPOSLIST, "---", $*ATCOL, "--(", $¢.pos, ")" }
+        <?at($*STARTLINE + @*COLPOSLIST[$*ATCOL])>
+    }
+
+    token check_end_cell {
+        <?before \h+ <.check_before_colpos>>
+    }
+
+    # XXX nqp needs constants
+    my $TBL_LIGHT  := 0;
+    my $TBL_HEAVY  := 1;
+    my $TBL_DOUBLE := 2;
+    proto token table {*}
+    multi token table:sym<uni_border> {
+        :my $*ROWSTYLE;
+        :my @*COLSTYLES := nqp::list();
+        :my @*COLPOSLIST := nqp::list();
+        :my $*ATCOL := 0;
+        :my $*STARTLINE;
+
+        <.start_table_line> <.ws>
+
+        [
+        | [
+          | \┏ { $*ROWSTYLE := $TBL_HEAVY }
+          | \┎ { $*ROWSTYLE := $TBL_LIGHT }
+          ]
+          { nqp::push(@*COLSTYLES, $TBL_HEAVY) }
+        | [
+          | \┍ { $*ROWSTYLE := $TBL_HEAVY  }
+          | <[┌╭]> { $*ROWSTYLE := $TBL_LIGHT  }
+          | \╒ { $*ROWSTYLE := $TBL_DOUBLE }
+          ]
+          { nqp::push(@*COLSTYLES, $TBL_LIGHT) }
+        | [
+          | \╓ { $*ROWSTYLE := $TBL_LIGHT  }
+          | \╔ { $*ROWSTYLE := $TBL_DOUBLE }
+          ]
+          { nqp::push(@*COLSTYLES, $TBL_DOUBLE) }
+        ]
+
+        <.record_colpos>
+
+        # try a series of either horizontal or T pieces
+        [
+        | <?[┬┮┰┲╥┯┭┳┱╤╦]> # T
+          [
+          | <?{$*ROWSTYLE == $TBL_LIGHT}>
+            [
+            || [
+               | [
+                 | \┬ {}
+                 | \┮ { $*ROWSTYLE := $TBL_HEAVY }
+                 ]
+                 { nqp::push(@*COLSTYLES, $TBL_LIGHT) }
+               | [
+                 | \┰ {}
+                 | \┲ { $*ROWSTYLE := $TBL_HEAVY }
+                 ]
+                 { nqp::push(@*COLSTYLES, $TBL_HEAVY) }
+               | \╥ { nqp::push(@*COLSTYLE, $TBL_DOUBLE) }
+               ]
+            || <.panic("Expected a T intersection with left light part")>
+            ]
+          | <?{$*ROWSTYLE == $TBL_HEAVY}>
+            [
+            || [
+               | [
+                 | \┯ {}
+                 | \┭ { $*ROWSTYLE := $TBL_LIGHT }
+                 ]
+                 { nqp::push(@*COLSTYLES, $TBL_LIGHT) }
+               | [
+                 | \┳ {}
+                 | \┱ { $*ROWSTYLE := $TBL_LIGHT }
+                 ]
+                 { nqp::push(@*COLSTYLES, $TBL_HEAVY) }
+               ]
+            || <.panic("Expected a T intersection with left heavy part")>
+            ]
+          | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+            [
+            || [
+               | \╤ { nqp::push(@*COLSTYLES, $TBL_LIGHT) }
+               | \╦ { nqp::push(@*COLSTYLES, $TBL_DOUBLE) }
+               ]
+            || <.panic("Expected a T intersection with left double part")>
+            ]
+          ]
+          <.record_colpos>
+        | <?[╼─┄┈╌╾━┅┉╍═]> # -
+          [
+          | <?{$*ROWSTYLE == $TBL_LIGHT}>
+            [
+            || [
+               | \╼ { $*ROWSTYLE := $TBL_HEAVY }
+               | <[─┄┈╌]>
+               ]
+            || <.panic("Expected light border here (any of < ─ ┄ ┈ ╌ ╼ >)")>
+            ]
+          | <?{$*ROWSTYLE == $TBL_HEAVY}>
+            [
+            || [
+               | \╾ { $*ROWSTYLE := $TBL_LIGHT }
+               | <[━┅┉╍]>
+               ]
+            || <.panic("Expected heavy border here (any of < ━ ┅ ┉ ╍ ╾ >)")>
+            ]
+          | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+            [
+            || \═
+            || <.panic("Expected ═ border here")>
+            ]
+          ]
+        ]+
+
+          # top-right corner
+        [
+        | <?{$*ROWSTYLE == $TBL_LIGHT}>
+          [
+          || [
+             | <[╮┐]> { nqp::push(@*COLSTYLES, $TBL_LIGHT)  }
+             | \┒     { nqp::push(@*COLSTYLES, $TBL_HEAVY)  }
+             | \╖     { nqp::push(@*COLSTYLES, $TBL_DOUBLE) }
+             ]
+          || <.panic("Expected top-right corner with left light piece")>
+          ]
+        | <?{$*ROWSTYLE == $TBL_HEAVY}>
+          [
+          || [
+             | \┑ { nqp::push(@*COLSTYLES, $TBL_LIGHT) }
+             | \┓ { nqp::push(@*COLSTYLES, $TBL_HEAVY) }
+             ]
+          || <.panic("Expected top-right corner with left heavy piece")>
+          ]
+        | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+          [
+          || [
+             | \╕ { nqp::push(@*COLSTYLES, $TBL_LIGHT)  }
+             | \╗ { nqp::push(@*COLSTYLES, $TBL_DOUBLE) }
+             ]
+          || <.panic("Expected top-right corner with left light piece")>
+          ]
+        ]
+
+        <.record_colpos>
+
+        <.ws> <.end_line>
+
+        # now to parse next lines; expect any number of non-separator lines,
+        # followed by separator. (For now, require one non-sep line per row,
+        # i.e. no separator doubling.
+
+        # group handling a visual row and then its row separator
+        [ <!before <.start_line> <.ws> <[└┕┖┗╘╙╚╰]>> # don't use start_table_line, just in case the dynamic set there isn't unset by <before>
+
+          # a row as the user would call it, regardless of how many content
+          # lines it spans. Set up so that column 0 would be
+          # $<visual_row>[*]<column>[0], for example.
+          $<visual_row>=(
+            (
+              # make sure it's a content, not separator, line
+              <?before <.start_line> <.ws> <[│┆┊╎╽┃┇┋╏╿║]>> 
+
+              # START LINE
+              <.start_table_line> <.ws>
+
+              # we've run out of whitespace to grab, so we I<have> to be in the
+              # right spot for the left border, or else something's busted.
+              [<.check_before_colpos> || <.panic("Wrong position for left border")>]
+
+              # now to actually get the left border
+              <.table_take_colsep_uni>
+
+              # grab columns, along with borders, this'll catch the right border too
+              [ <?{$*ATCOL - 1 < +@*COLPOSLIST}> #>
+                $<column>=(
+                  | <?check_end_cell>       # empty cell
+                  | [<!check_end_cell> \N]+ # non-empty (\N to prevent runaway problems)
+                )
+                <.table_take_colsep_uni>
+              ]+
+
+              <.end_line>
+
+            )+
+          )
+
+          # the row separator, or just before the bottom border (we don't catch
+          # the bottom border here since we don't want it to be captured in this
+          # row-taking repititon, and potentially expose ourselves to a "can use
+          # bottom border as separator" bug)
+          [
+          || <?before <.start_line> <.ws> <[└┕┖┗╘╙╚╰]>> # just do nothing if we're in front of a bottom border, let it be handled below
+          || <?before <.start_line> <.ws> <[├┝┞┟┠┡┢┣╞╟╠]>>
+             <.start_table_line> <.ws>
+             [<.check_before_colpos> || <.panic("Wrong position for left border")>]
+             [
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+               [
+               || [
+                  | [
+                    | \├
+                    | \┟ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                    ]
+                    { $*ROWSTYLE := $TBL_LIGHT }
+                  | [
+                    | \┝
+                    | \┢ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                    ]
+                    { $*ROWSTYLE := $TBL_HEAVY }
+                  | \╞ { $*ROWSTYLE := $TBL_DOUBLE }
+                  ]
+               || <.panic("Expected left-side T with light top part")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+               [
+               || [
+                  | [
+                    | \┞ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                    | \┠
+                    ]
+                    { $*ROWSTYLE := $TBL_LIGHT }
+                  | [
+                    | \┡ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                    | \┣
+                    ]
+                    { $*ROWSTYLE := $TBL_HEAVY }
+                  ]
+               || <.panic("Expected left-side T with heavy top part")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+               [
+               || [
+                  | \╟ { $*ROWSTYLE := $TBL_LIGHT }
+                  | \╠ { $*ROWSTYLE := $TBL_DOUBLE }
+                  ]
+               || <.panic("Expected left-side T with doubled top part")>
+               ]
+             ]
+             { $*ATCOL := nqp::add_i($*ATCOL, 1) }
+
+             # get rest of line
+             [ <.table_take_rowsep_to_intersect_uni>
+               [<.table_take_intersect_uni> | <?[┤┥┦┧┨┩┪┫╡╢╣]>]
+             ]+
+
+             # get right T
+             [
+             | <?{$*ROWSTYLE == $TBL_LIGHT}>
+               [
+               || [
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+                    [
+                    || [
+                       | \┤
+                       | \┧ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                       ]
+                    || <.panic("Expected right-side T intersection with light top and left parts")>
+                    ]
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+                    [
+                    || [
+                       | \┨
+                       | \┦ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                       ]
+                    || <.panic("Expected right-side T intersection with light left and top parts")>
+                    ]
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+                    [
+                    || \╢
+                    || <.panic("Expected right-side T intersection with light left and doubled top parts")>
+                    ]
+                  ]
+               || <.panic("Couldn't match any columns (problem with @*COLSTYLES?)")>
+               ]
+             | <?{$*ROWSTYLE == $TBL_HEAVY}>
+               [
+               || [
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+                    [
+                    || [
+                       | \┥
+                       | \┪ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                       ]
+                    || <.panic("Expected right-side T intersection with heavy left and light top parts")>
+                    ]
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+                    [
+                    || [
+                       | \┫
+                       | \┩ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                       ]
+                    || <.panic("Expected right-side T intersection with heavy top and left parts")>
+                    ]
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+                    <.panic("Unicode currently does not have characters to join a doubled column and heavy row. Sorry.")>
+                  ]
+               || <.panic("Couldn't match any T intersection (problem with @*COLSTYLES?)")>
+               ]
+             | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+               [
+               || [
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+                    [
+                    || \╡
+                    || <.panic("Expected right-side T intersection with doubled left and light top parts")>
+                    ]
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+                    <.panic("Unicode currently does not have characters to join a heavy column and doubled row. Sorry.")>
+                  | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+                    [
+                    || \╣
+                    || <.panic("Expected right-side T intersection with doubled left and top parts")>
+                    ]
+                  ]
+               || <.panic("Couldn't match any T intersection (problem with @*COLSTYLES?)")>
+               ]
+             ]
+
+             # end line
+             <.ws> <.end_line>
+          || <.panic("Unknown character where left intersection expected")>
+          ]
+        ]+
+
+        # and this is where we take the bottom border
+        <.start_table_line> <.ws>
+        [ <?check_before_colpos> || <.panic("Wrong position for corner")> ]
+
+        # bottom-left corner
+        [
+        | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+          [
+          || [
+             | <[╰└]> { $*ROWSTYLE := $TBL_LIGHT }
+             | \┕     { $*ROWSTYLE := $TBL_HEAVY }
+             | \╘     { $*ROWSTYLE := $TBL_DOUBLE }
+             ]
+          || <.panic("Expected bottom-left corner with light top part here")>
+          ]
+        | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+          [
+          || [
+             | \┖ { $*ROWSTYLE := $TBL_LIGHT }
+             | \┗ { $*ROWSTYLE := $TBL_HEAVY }
+             ]
+          || <.panic("Expected bottom-left corner with heavy top part here")>
+          ]
+        | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+          [
+          || [
+             | \╙ { $*ROWSTYLE := $TBL_LIGHT }
+             | \╚ { $*ROWSTYLE := $TBL_DOUBLE }
+             ]
+          || <.panic("Expected bottom-left corner with doubled top part here")>
+          ]
+        ]
+        { $*ATCOL := nqp::add_i($*ATCOL, 1) }
+
+        # now to get row separators and bottom-side T intersections.
+
+        [ <.table_take_rowsep_to_intersect_uni>
+          [
+          |<?[╯┘┙┚┛╛╜╝]>
+          | [
+            | <?{$*ROWSTYLE == $TBL_LIGHT}>
+              [
+              || [
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+                   [
+                   || [
+                      | \┴
+                      | \┶ { $*ROWSTYLE := $TBL_HEAVY }
+                      ]
+                   || <.panic("Expected bottom-side T crossing with top and left light parts")>
+                   ]
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+                   [
+                   || [
+                      | \┸
+                      | \┺ { $*ROWSTYLE := $TBL_HEAVY }
+                      ]
+                   || <.panic("Expected bottom-side T crossing with light left and heavy top parts")>
+                   ]
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+                   [
+                   || \╨
+                   || <.panic("Expected bottom-side T crossing with light left and double top parts")>
+                   ]
+                 ]
+              || <.panic("Couldn't match T crossing (problem with @*COLSTYLES?)")>
+              ]
+            | <?{$*ROWSTYLE == $TBL_HEAVY}>
+              [
+              || [
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+                   [
+                   || [
+                      | \┵ { $*ROWSTYLE := $TBL_LIGHT }
+                      | \┷
+                      ]
+                   || <.panic("Expected bottom-side T intersection with heavy left and light top parts")>
+                   ]
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+                   [
+                   || [
+                      | \┹ { $*ROWSTYLE := $TBL_LIGHT }
+                      | \┻
+                      ]
+                   || <.panic("Expected bottom-side T intersection with heavy left and top parts")>
+                   ]
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+                   <.panic("Unicode does not currently support an intersection of double and heavy lines. Sorry.")>
+                 ]
+              || <.panic("Couldn't match T crossing (problem with @*COLSTYLES?)")>
+              ]
+            | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+              [
+              || [
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+                   [
+                   || \╧
+                   || <.panic("Expected bottom-side T intersection with doubled left and light top parts")>
+                   ]
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+                   <.panic("Unicode does not currently support an intersection of double and heavy lines. Sorry.")>
+                 | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+                   [
+                   || \╩
+                   || <.panic("Expected bottom-side T intersection with doubled left and top parts")>
+                   ]
+                 ]
+              || <.panic("Couldn't match T crossing (problem with @*COLSTYLES?)")>
+              ]
+            ]
+            { $*ATCOL := nqp::add_i($*ATCOL, 1) }
+          ]
+        ]+
+
+        # and now for bottom-right corner
+        [
+        | <?{$*ROWSTYLE == $TBL_LIGHT}>
+          [
+          || [
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+               [
+               || <[╯┘]>
+               || <.panic("Expected bottom-right corner with light top and left parts")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+               [
+               || \┚
+               || <.panic("Expected bottom-right corner with light left and heavy top parts")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+               [
+               || \╜
+               || <.panic("Expected bottom-right corner with light left and doubled top parts")>
+               ]
+             ]
+          || <.panic("Couldn't find bottom-right corner (problem with @*COLSTYLES?)")>
+          ]
+        | <?{$*ROWSTYLE == $TBL_HEAVY}>
+          [
+          || [
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+               [
+               || \┙
+               || <.panic("Expected bottom-right corner with heavy left and light top parts")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+               [
+               || \┛
+               || <.panic("Expected bottom-right corner with heavy left and top parts")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+               <.panic("Unicode doesn't currently support intersection of heavy and double lines. Sorry.")>
+             ]
+          || <.panic("Couldn't find bottom-right corner (problem with @*COLSTYLES?)")>
+          ]
+        | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+          [
+          || [
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+               [
+               || \╛
+               || <.panic("Expected bottom-right corner with doubled left and light top parts")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+               <.panic("Unicode doesn't currently support intersection of heavy and double lines. Sorry.")>
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+               [
+               || \╝
+               || <.panic("Expected bottom-right corner with doubled left and top parts")>
+               ]
+             ]
+          || <.panic("Couldn't find bottom-right corner (problem with @*COLSTYLES?)")>
+          ]
+        ]
+
+        # and now to end this final line
+        <.ws> <.end_line>
+
+        # just a debug check to see if we got through parsing the whole thing
+        { say "A-OK!" }
+    }
+
+#`[[
+─━│┃┄┅┆┇┈┉┊┋┌┍┎┏
+┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟
+┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯
+┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿
+╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏
+═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟
+╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯
+╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿
+]]
+
+    # takes a 4-way intersection between column and row separators
+    token table_take_intersect_uni {
+        <?check_before_colpos>
+
+        [
+        | <?{$*ROWSTYLE == $TBL_LIGHT}>
+          [
+          || [
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+               [
+               || [
+                  | [
+                    | \┼
+                    | \╁ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                    ]
+                  | [
+                    | \┾
+                    | \╆ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                    ]
+                    { $*ROWSTYLE := $TBL_HEAVY }
+                  ]
+               || <.panic("Expected something with a light top part as well as the light left part")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+               [
+               || [
+                  | [
+                    | \╀ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                    | \╂
+                    ]
+                  | [
+                    | \╄ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                    | \╊
+                    ]
+                    { $*ROWSTYLE := $TBL_HEAVY }
+                  ]
+               || <.panic("Expected something with a heavy top part in addition to the required light left")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+               [
+               || \╫
+               || <.panic("Expected a doubled vertical part to the intersection here")>
+               ]
+             ]
+          || <.panic("Problem getting intersection (problem in @*COLSTYLES?)")>
+          ]
+        | <?{$*ROWSTYLE == $TBL_HEAVY}>
+          [
+          || [
+             | <?{@*COSLTYLES[$*ATCOL] == $TBL_LIGHT}>
+               [
+               || [
+                  | [
+                    | \┽
+                    | \╅ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                    ]
+                    { $*ROWSTYLE := $TBL_LIGHT }
+                  | [
+                    | \┿
+                    | \╈ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+                    ]
+                  ]
+               || <.panic("Expected a light top part in addition to a left heavy part")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+               [
+               || [
+                  | [
+                    | \╃ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                    | \╉
+                    ]
+                    { $*ROWSTYLE := $TBL_LIGHT }
+                  | [
+                    | \╇ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+                    | \╋
+                    ]
+                  ]
+               || <.panic("Expected heavy top and left parts for this intersection")>
+               ]
+             | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+               <.panic("Unicode (as of 8.0.0) cannot support an intersection of double and heavy. Sorry.")>
+             ]
+          || <.panic("Problem getting intersection (problem in @*COLSTYLES?)")>
+          ]
+        | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+          [
+          || [
+             | <?{@*COLSTYLE[$*ATCOL] == $TBL_LIGHT}>
+               [
+               || \╪
+               || <.panic("Expected horizontal double and vertical single lines intersecting here")>
+               ]
+             | <?{@*COLSTYLE[$*ATCOL] == $TBL_HEAVY}>
+               <.panic("Unicode (as of 8.0.0) cannot support an intersection of double and heavy. Sorry.")>
+             | <?{@*COLSTYLE[$*ATCOL] == $TBL_DOUBLE}>
+               [
+               || \╬
+               || <.panic("Expected intersecting double lines here")>
+               ]
+             ]
+          || <.panic("Problem getting intersection (problem in @*COLSTYLES?)")>
+          ]
+        ]
+        { $*ATCOL := nqp::add_i($*ATCOL, 1) }
+    }
+
+    # takes one column's row separator
+    token table_take_rowsep_to_intersect_uni {
+        [ <!check_before_colpos>
+          [
+          | <?{$*ROWSTYLE == $TBL_LIGHT}>
+            [
+            || [
+               | \╼ { $*ROWSTYLE := $TBL_HEAVY }
+               | <[┄┈╌─]>
+               ]
+            || <.panic("Expected light row line here")>
+            ]
+          | <?{$*ROWSTYLE == $TBL_HEAVY}>
+            [
+            || [
+               | \╾ { $*ROWSTYLE := $TBL_LIGHT }
+               | <[┉━┅╍]>
+               ]
+            || <.panic("Expected heavy row line here")>
+            ]
+          | <?{$*ROWSTYLE == $TBL_DOUBLE}>
+            [
+            || \═
+            || <.panic("Expected double row line here")>
+            ]
+          ]
+        ]+
+    }
+
+    # takes a vertical column separator for you
+    token table_take_colsep_uni {
+        [
+        || <?check_end_cell>
+        || <?{$*ATCOL == 0}> <?check_before_colpos> # we know we're OK on leading ws if it's the first column
+        || [ <?check_before_colpos> <.panic("Missing whitespace before column separator position")> || <.panic("Not at end of cell")> ]
+        ]
+        # grab leading whitespace now
+        <.ws>
+
+        # and now, the separator
+        [
+        | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
+          [
+          || [
+             | <[│┆┊╎]>
+             | \╽ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
+             ]
+          || <.panic("Expected a light column separator, or ╽, here.")>
+          ]
+        | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
+          [
+          || [
+             | <[┃┇┋╏]>
+             | \╿ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
+             ]
+          || <.panic("Expected a heavy column separator, or ╿, here.")>
+          ]
+        | <?{@*COLSTYLES[$*ATCOL] == $TBL_DOUBLE}>
+          [
+          || \║
+          || <.panic("Expected double-line column separator here.")>
+          ]
+        ]
+
+        # now to check for trailing whitespace too, or else error (separator needs space on both sides)
+        [ <?ws> || <?end_line> || <.panic("Column found at right spot but not followed with whitespace, which is required")> ]
+        { $*ATCOL := nqp::add_i($*ATCOL, 1) }
+
+        # now to grab trailing whitespace _unless_ it's an empty cell, so we
+        # don't ruin how empty cells are currently checked (note that the
+        # $*ATCOL addition above means check_end_cell is now for the _next_
+        # column separator.
+        [ <!check_end_cell> <.ws> ]?
     }
 
     token block_name {
@@ -252,7 +980,6 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         | output
         | para
         | pod
-        | table
     }
 
     # since S26 states that each name and its plural is reserved, I decided to
