@@ -473,35 +473,6 @@ class Pod6::MBlock is Pod6::Excerpt does Pod6::Children {
     method block-name { self.^name.split('::')[*-1] }
 }
 
-#| Configuration options. Contains an accumulation of configurations, so you
-#| only need to find the latest one. Additionally, each Pod6::Block starts with
-#| a Config block, to make sure searching doesn't have to jump back out. This
-#| uses the same config mechanism inherited from Pod6::Excerpt, but fills it
-#| with a hash of hashes instead of the more normal one-level hash.
-class Pod6::Config is Pod6::Excerpt {
-    method new() { self.bless() }
-
-    method add-config(Str $blorf, Str $key, $value) {
-        self{$blorf}{$key} = $value;
-    }
-
-    method grab-config-for(Str $blorf) { self{$blorf} // Hash.new }
-
-    method inherit-config(Pod6::Config:D $oldconfig) {
-        for $oldconfig.hash.kv -> $blorf, $opts {
-            for $opts.kv -> $key, $val {
-                self.add-config($blorf, $key, $val);
-            }
-        }
-    }
-
-    has $.get-margin;
-    method set-vmargin($a) { $!get-margin = $a }
-
-    # for Pod6::Block.text
-    method text { "" }
-}
-
 #| The document class. The base container for every Pod construct in a file.
 class Pod6::Document is Pod6::Block { }
 

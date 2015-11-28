@@ -20,7 +20,7 @@ class Pod6::Actions {
         # them -- saves having to decide to lookup in !default
         "code"    => {  :verbatim,  :keep-space, :!implies-blocks },
         "comment" => { :!verbatim, :!keep-space, :!implies-blocks },
-        "defn"    => { :!verbatim, :!keep-space,  :implies-blocks },
+        "defn"    => { :!verbatim, :!keep-space,  :implies-blocks }, # :implies-blocks irrelevant for term line
         "head*"   => { :!verbatim, :!keep-space, :!implies-blocks },
         "input"   => { :!verbatim,  :keep-space, :!implies-blocks },
         "item*"   => { :!verbatim, :!keep-space,  :implies-blocks },
