@@ -9,12 +9,6 @@ class Pod6::Excerpt does Associative {
         self.bless(:%config);
     }
 
-    multi method hash(Pod6::Excerpt:D:)                          { %!config }
-    multi method AT-KEY(Pod6::Excerpt:D: Str $key) is raw        { %!config.AT-KEY($key) }
-    multi method EXISTS-KEY(Pod6::Excerpt:D: Str $key)           { %!config.EXISTS-KEY($key) }
-    multi method DELETE-KEY(Pod6::Excerpt:D: Str $key)           { %!config.DELETE-KEY($key) }
-    multi method ASSIGN-KEY(Pod6::Excerpt:D: Str $key, Str $val) { %!config.ASSIGN-KEY($key, $val) }
-
     multi method gist(Pod6::Excerpt:D:) {
         my $gist = "{self.^name}:\n";
 
@@ -29,13 +23,6 @@ class Pod6::Excerpt does Associative {
         }
 
         $gist.chomp;
-    }
-
-    method set-config(%set-to) { %!config = %set-to }
-    method add-to-config(%newopts) {
-        for %newopts.kv -> $k, $v {
-            %!config{$k} = $v;
-        }
     }
 
     method gist-children { "" }
@@ -107,10 +94,6 @@ role Pod6::Text::FormatCode is Pod6::Text does Pod6::Children[Pod6::Text] {
     method new(:%config, **@children) {
         self.bless(:@children, :%config);
     }
-    method preserves-spaces { False }
-    method verbatim-text { False }
-
-    method allow-fc($fc) { !self.verbatim-text || ?self<allow>.grep($fc) }
 
     method text { [~] self.list».text }
 
@@ -130,10 +113,7 @@ role Pod6::Text::FormatCode::Reserved {
 class Pod6::Text::FormatCode::A does Pod6::Text::FormatCode { }
 class Pod6::Text::FormatCode::B does Pod6::Text::FormatCode { }
 
-class Pod6::Text::FormatCode::C does Pod6::Text::FormatCode {
-    method preserves-spaces { True }
-    method verbatim-text { True }
-}
+class Pod6::Text::FormatCode::C does Pod6::Text::FormatCode { }
 
 class Pod6::Text::FormatCode::D does Pod6::Text::FormatCode {
     has $.term;
@@ -162,9 +142,7 @@ class Pod6::Text::FormatCode::H does Pod6::Text::FormatCode::Reserved { }
 class Pod6::Text::FormatCode::I does Pod6::Text::FormatCode { }
 class Pod6::Text::FormatCode::J does Pod6::Text::FormatCode::Reserved { }
 
-class Pod6::Text::FormatCode::K does Pod6::Text::FormatCode {
-    method preserves-spaces { True }
-}
+class Pod6::Text::FormatCode::K does Pod6::Text::FormatCode { }
 
 class Pod6::Text::FormatCode::L does Pod6::Text::FormatCode {
     has $.address;
@@ -179,8 +157,6 @@ class Pod6::Text::FormatCode::M does Pod6::Text::FormatCode {
     # in .verbatim, always get _this_ class' version of .text, which is the
     # default .text for Pod6::Text types
     method verbatim { self.Pod6::Text::FormatCode::M::text }
-
-    method verbatim-text { True }
 }
 
 class Pod6::Text::FormatCode::N does Pod6::Text::FormatCode { }
@@ -200,19 +176,13 @@ class Pod6::Text::FormatCode::P does Pod6::Text::FormatCode {
 class Pod6::Text::FormatCode::Q does Pod6::Text::FormatCode::Reserved { }
 class Pod6::Text::FormatCode::R does Pod6::Text::FormatCode { }
 
-class Pod6::Text::FormatCode::S does Pod6::Text::FormatCode {
-    method preserves-spaces { True }
-}
+class Pod6::Text::FormatCode::S does Pod6::Text::FormatCode { }
 
-class Pod6::Text::FormatCode::T does Pod6::Text::FormatCode {
-    method preserves-spaces { True }
-}
+class Pod6::Text::FormatCode::T does Pod6::Text::FormatCode { }
 
 class Pod6::Text::FormatCode::U does Pod6::Text::FormatCode { }
 
-class Pod6::Text::FormatCode::V does Pod6::Text::FormatCode {
-    method verbatim-text { True }
-}
+class Pod6::Text::FormatCode::V does Pod6::Text::FormatCode { }
 
 class Pod6::Text::FormatCode::W does Pod6::Text::FormatCode::Reserved { }
 
@@ -338,41 +308,16 @@ class Pod6::Text::FormatCode::P::Doc is Pod6::Text::FormatCode::P {
 
 #| base class for blocks
 class Pod6::Block is Pod6::Excerpt does Pod6::Children {
-    # these are numeric margins; character margins are in the config options
-    has $.vmargin = 0;
-    has $.cvmargin = 0;
-
     method new(:%config, *@children) {
         self.bless(:@children, :%config);
     }
-
-    method implies-code { False }
-    method implies-para { False }
-
-    method preserves-spaces { False }
-    method verbatim-text { False }
-
-    method allow-fc($fc) { !self.verbatim-text || ?self<allow>.grep($fc) }
-
-    method set-vmargin(UInt $spaces = 0)  { $!vmargin  = $spaces }
-    method set-cvmargin(UInt $spaces = 0) { $!cvmargin = $spaces }
-
-    # XXX currently just does space-related
-    method get-margin { $!vmargin }
-    method get-para-margin { self.get-margin() } # XXX will differ with :margin support
-    method get-code-margin { $!cvmargin }
-
-    method last-config-block { self.list.grep(* ~~ Pod6::Config)[*-1] }
 
     #| gets the contents of the block as plaintext. Meant for "bottom" blocks
     #| (which only contain text, and not other blocks), but works on all blocks.
     method text { [~] @!children».text }
 }
 
-class Pod6::Block::Code is Pod6::Block {
-    method preserves-spaces { True }
-    method verbatim-text { True }
-}
+class Pod6::Block::Code is Pod6::Block { }
 class Pod6::Block::Comment is Pod6::Block { }
 
 class Pod6::Block::Defn is Pod6::Block {
@@ -391,9 +336,7 @@ class Pod6::Block::Head is Pod6::Block {
     }
 }
 
-class Pod6::Block::Input is Pod6::Block {
-    method preserves-spaces { True }
-}
+class Pod6::Block::Input is Pod6::Block { }
 
 class Pod6::Block::Item is Pod6::Block {
     has $.level;
@@ -401,36 +344,15 @@ class Pod6::Block::Item is Pod6::Block {
     method new(:$level = 1, :%config, *@children) {
         self.bless(:$level, :@children, :%config);
     }
-
-    method implies-code { True }
-    method implies-para { True }
 }
 
-class Pod6::Block::Nested is Pod6::Block {
-    method implies-code { True }
-    method implies-para { True }
-}
-
-class Pod6::Block::Output is Pod6::Block {
-    method preserves-spaces { True }
-}
-
+class Pod6::Block::Nested is Pod6::Block { }
+class Pod6::Block::Output is Pod6::Block { }
 class Pod6::Block::Para is Pod6::Block { }
-
-class Pod6::Block::Pod is Pod6::Block {
-    method implies-code { True }
-    method implies-para { True }
-}
+class Pod6::Block::Pod is Pod6::Block { }
 class Pod6::Block::Table is Pod6::Block { } # XXX replace with actual table class
-
-class Pod6::Block::Data is Pod6::Block {
-    method preserves-spaces { True }
-}
-
-class Pod6::Block::Finish is Pod6::Block {
-    method implies-code { True }
-    method implies-para { True }
-}
+class Pod6::Block::Data is Pod6::Block { }
+class Pod6::Block::Finish is Pod6::Block { }
 
 #| A semantic block (XXX we likely want these separated by class, but we'd
 #| really want a macro to make all those classes for us, since they all behave
@@ -457,9 +379,6 @@ class Pod6::Block::SEMANTIC is Pod6::Block {
 
         $gist.chomp;
     }
-
-    method implies-code { True }
-    method implies-para { True }
 }
 
 #| A custom block (isn't Pod6::Block, that's for standard types)
@@ -478,7 +397,4 @@ class Pod6::Document is Pod6::Block { }
 class Pod6::Ambient is Pod6::Excerpt { }
 class Pod6::Declarator is Pod6::Excerpt  { }
 class Pod6::Alias is Pod6::Excerpt { }
-class Pod6::Encoding is Pod6::Excerpt {
-    has $.get-margin;
-    method set-vmargin($a) { $!get-margin = $a }
-}
+class Pod6::Encoding is Pod6::Excerpt { }
