@@ -143,4 +143,10 @@
              would have to pull the appropriate items from that list manually,
              so AT-KEY and friends won't be stupidly simple)
 
+=item Make Pod another language on the language braid, at the least so that we
+      can keep the Pod stuff separated like it is now. I think it'd be nicer
+      than having it embedded in the C<$~MAIN> parser. (It would also make it
+      easier for someone to insert their own code documentation parser, as a
+      plus.)
+
 =end pod
