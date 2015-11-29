@@ -1,0 +1,42 @@
+=begin pod
+
+=TITLE SUPERNOVA, The New Pod 6 Parser
+
+=AUTHOR Faye N. (ShimmerFairy) and others
+
+=for SYNOPSIS
+A development effort to produce a better Pod 6 parser for rakudo, focusing on
+bringing in greater definition of the "AST" of Pod6, more complete feature
+support, a cleaner and more readable collection of code, and whatever else is
+neede.
+
+=head1 How to Use
+
+You'll need C<Grammar::Parsefail> from the ecosystem, which provides a version
+of the error reporting in Rakudo's core grammar that makes it easier to program
+in a "going to core" mindset.
+
+=head1 How to Contribute
+
+The only thing to keep in mind is that we're programming this in a "pseudo-core"
+fashion, that is using NQP features where possible/feasible, but still
+ultimately coding in Perl 6 for easier access to the lexical environement the
+parser would usually have available.
+
+(In other words, we're not coding the Grammar and such in NQP because it seems
+like it'd be too annoying to get access to Perl 6 stuff in an isolated project
+like this.)
+
+Make use of things like C<$*W> to do what you I<would> be using the C<World> for
+in the real rakudo source. There are various C<shim-> functions to do unboxing
+and boxing that wouldn't be necessary in NQP land.
+
+If you write or find some code that'll have to be changed when the code is
+eventually moved to rakudo's source, please mark it with a C<# TOCORE>
+comment. This'll help in rewriting more stuff before the code starts going
+through the try it/fix it cycle, which in rakudo can drag on quite a bit. These
+comments will hopefully cut down on the length of that cycle.
+
+See the other C<.pod6> files for more to-do and development info.
+
+=end pod

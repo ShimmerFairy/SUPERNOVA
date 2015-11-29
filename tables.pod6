@@ -1,0 +1,250 @@
+=begin pod
+
+=TITLE About Tables
+
+=SYNOPSIS Since the current spec has always seemed a bit light on how tables
+should work, and the things it does specify feel a bit too freeform in ways,
+here's how I currently plan on having tables work.
+
+=head1 General
+
+The column separators must have whitespace on both sides to be counted as a
+valid separator. This is more important for ASCII style, where its drawing
+characters could occur in normal text more often. The whitespace requirement
+allows you to quote such characters as verbatim (e.g. C<V<|>>) without it
+potentially I<still> being seen as a column separator.
+
+You cannot mix border styles in a table, e.g. drawing the header column in
+Unicode box-drawing characters, and using ASCII for the other columns.
+
+And just to make it clear, only one table can be put in a table block.
+
+=head1 Styles
+
+There are two styles of tables you can use: ASCII or Unicode. The ASCII version
+mostly uses characters commonly used to draw tables. The Unicode version uses
+the Unicode box-drawing characters.
+
+=head2 ASCII
+
+ASCII-style tables use C<-> for row separators, C<|> for column separators, and
+C<+> for intersections and corners. Additionally, C<=> can be used for header
+row separation, and C<#> for header column separation and intersections.
+
+=begin code :allow<V>
+V<>=begin table
+    +----#--------+---+
+    | AB # CDEFGH | I |
+    +====#========+===+
+    | 12 # 34     | 5 |
+    | 34 # 45     |   |
+    +----#--------+---+
+    | 00 # 000    | 0 |
+    +----#--------+---+
+V<>=end table
+=end code
+
+Note that header row/column detection (see below) ignores intersections for
+greater flexibility given the limited character set.
+
+=head2 Unicode
+
+Unicode-style tables use the box drawing characters to outline tables. The
+heavy, light, and double line styles can be freely mixed, so long as they're
+transitioned between.
+
+=begin code
+Row separator:              ─ ━ ┄ ┅ ┈ ┉ ╌ ╍ ═ ╴ ╶ ╸ ╺ ╼ ╾
+Column separator:           │ ┃ ┊ ┋ ┆ ┇ ╎ ╏ ║ ╵ ╷ ╹ ╻ ╽ ╿
+Top-left corner:            ┌ ┍ ┎ ┏ ╒ ╓ ╔ ╭
+Top-right corner:           ┐ ┑ ┒ ┓ ╕ ╖ ╗ ╮
+Bottom-left corner:         └ ┕ ┖ ┗ ╘ ╙ ╚ ╰
+Bottom-right corner:        ┘ ┙ ┚ ┛ ╛ ╜ ╝ ╯
+Left border intersection:   ├ ┝ ┞ ┟ ┠ ┡ ┢ ┣ ╞ ╟ ╠
+Right border intersection:  ┤ ┥ ┦ ┧ ┨ ┩ ┪ ┫ ╡ ╢ ╣
+Top border intersection:    ┬ ┭ ┮ ┯ ┰ ┱ ┲ ┳ ╤ ╥ ╦
+Bottom border intersection: ┴ ┵ ┶ ┷ ┸ ┹ ┺ ┻ ╧ ╨ ╩
+Inner table intersection:   ┼ ┽ ┾ ┿ ╀ ╁ ╂ ╃ ╄ ╅ ╆ ╇ ╈ ╉ ╊ ╋ ╪ ╫ ╬
+=end code
+
+Note that both heavy and double line styles are counted as header lines for
+header row/column detection (see below).
+
+=head1 Header rows/columns
+
+Header rows and columns are defined by the presence of a "heavy" line separating
+the header rows/columns.
+
+=begin code
++---------+
+| HEADER! |
++=========+
+| normal  |
++---------+
+=end code
+
+As soon as a "light" line segment or intersection is encountered (not counting
+intersections in ASCII tables), the line is counted as a non-heavy line. In this
+example, the C<-> right before the border means it's not a header row separator:
+
+=begin code
++---------+
+| both    |
++========-+
+| normal  |
++---------+
+=end code
+
+Headers can currently only be the topmost rows and leftmost columns.
+
+If another header line occurs in the table, then the first header line is
+disregarded and we act as if there are no headers (this lets you use an
+all-heavy border style without getting an entirely-header table).
+
+=begin code
++--------------------+
+| could be header    |
++====================+
+| normal cell        |
++--------------------+
+| but the next line  |
+| ruins the above    |
+| header             |
++====================+
+| aw, so close       |
++--------------------+
+=end code
+
+You I<can> have multiple columns/rows in a header section, just make sure to
+separate those headers with light separators. In this example, the header rows
+are erroneously separated with heavy separators, so there are no header rows;
+the two header columns (with top cells "no." and "name") I<are> properly
+separated with light column lines:
+
+=begin code
+┌───────┬───────────┰──────┬──────╮
+│ no.   │ name      ┃ aa   │ bb   │
+┝━━━━━━━┿━━━━━━━━━━━╋━━━━━━┿━━━━━━┥
+│ (int) │ (str)     ┃ (a)  │ (b)  │
+┝━━━━━━━┿━━━━━━━━━━━╋━━━━━━┿━━━━━━┥
+│     1 │ foo       ┃ bar  │ baz  │
+├───────┼───────────╂──────┼──────┤
+│     2 │ frobozz   ┃ quux │ qnnx │
+└───────┴───────────┸──────┴──────╯
+=end code
+
+It's also worth noting that the borders are never taken into consideration, so
+they don't need to conform to any kind of style to get headers. This also means
+that there will I<always> be one non-header row and column.
+
+=head1 Multi-row or -column Cells
+
+Cells can span multiple rows and/or columns, so long as they are rectangular.
+
+To have a spanning cell, simply remove the separator in content
+lines. Separators however must always have intersection characters.
+
+=begin code
++-------+--------+
+| spanning col   |
++-------+--------+
+| span- | normal |
++ -ning +--------+
+| row   | normal |
++-------+--------+
+| rectangular    |
++ span, both row +
+| and column     |
++-------+--------+
+=end code
+
+(Conjecture: require row spans to keep the separator line clear (e.g. the place
+where C<-ning> occurs in the above example would have to be spaces instead);
+this would make it easier to detect these, and would make it easier to support
+spans in borderless tables)
+
+As mentioned, non-rectangular cells aren't permitted, like the following:
+
+=begin code
++-------+-------+
+| Invalid cell  |
++       +-------+
+|       | OK    |
++-------+-------+
+
++------------+-------+
+| Also Invalid!      |
++------------+       +
+|                    |
++------------+-------+
+
++----+------------+--+
+| may not even see   |
+| the misplaced      |
++    +------------+  +
+| border piece there |
+| as part of a       |
+| separator, but as  |
+| content!           |
++----+------------+--+
+=end code
+
+
+=head1 Borderless Tables
+
+For either style, you may leave off the outer border if desired. In this case,
+the parser can only ensure that you put column separators in consistent
+positions until it comes across its first row separator. This row separator will
+be considered definitive in terms of where columns are, and the total width of
+the table.
+
+(Conjecture: should borderless style support spanning cells? It could easily
+cause trouble for the "definitive separator" idea above. I don't think we could
+just "wing it" the entire way through, hoping we can get a consistent picture of
+columns by the end of it. For now at least, let's pretend that only bordered
+styles can do spans)
+
+=head1 Other Things
+
+You'll notice I left out tables that can be whitespace-separated, with columns
+separated by multiple whitespace characters, and either a single-line-per-row
+rowstyle (i.e. no row separators) or rows separated by blank lines.
+
+Adding to this is the old idea of a header row here being either made by the
+usual ASCII row characters (but with whitespace to separate columns), or
+(possibly) with a singular blank like between the header row and subsequent
+single-line rows.
+
+I've decided not to support this, since it seems so freeform and hard to
+manage. Not only for the author of the table, but as well for the parser. I just
+can't envision that kind of table being a good textual format for a document.
+
+If people absolutely insist on this however, for whatever reason, here are the
+stipulations:
+
+=item No column or row spanners, for obvious reasons
+
+=item Rows are either single-line or multiple-line with blank lines separating.
+
+=item One blank line in the table will mean the the text above constitutes
+      B<one> multi-line header row.
+
+=item More than one blank line means a multi-line table with no headers.
+
+=item Header columns are not supported.
+
+=item Possibly:
+
+=item2 Whitespace column separation must end on the same character column
+       (i.e. cell text must be left aligned)
+
+=item2 The first column must align with the virtual margin, or else the first
+       line of the table determines where the first column left-aligns.
+
+=item No using C<=> or similar to denote a row header, unlike old S26. That's
+      considered mixing styles, and is generally disallowed.
+
+=item Single-line (no header) style is the only possible whitespace style in
+      C<=for table> and C<=table>.
+
+=end pod

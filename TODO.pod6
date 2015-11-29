@@ -1,0 +1,146 @@
+=begin pod
+
+=TITLE Things Left To Do
+
+=head1 Major Things
+
+=item TABLES
+
+      =item2 Parse the other types of tables:
+
+             =item3 Borderless Unicode
+             =item3 Bordered ASCII
+             =item3 Borderless ASCII
+
+      =item2 Handle header rows/columns
+
+      =item2 Handle colspans and rowspans
+
+      =item2 Parse cell contents as implicit paras (i.e. parse formatting codes
+             with the knowledge that they could break in the middle for the next
+             cell)
+
+=item More thought on user-supplied types
+
+      =item2 That is, custom C<M<>> schemes, custom block names, and custom
+             C<L<>> and C<P<>> handlers.
+
+      =item2 How do they interact with the renderer?
+
+=item Work on rendering
+
+      =item2 We'll want a reference implementation to see how things are going;
+             either Pod6::To::HTML (since it's frequently used), or
+             Pod6::To::Text (since rakudo comes with it).
+
+      =item2 Do the standard Pod types supply a (somewhat-)automated way of
+             walking the tree and generating, or should that be the domain of
+             external modules?
+
+      =item2 How do custom types and renderers play together? I imagine various
+             custom types will want to be able to provide output for various
+             renderers, and renderers will want to handle various custom blocks
+             itself.
+
+      =item2 How should renderers identify themselves to custom types? They need
+             to know if they want to provide for different renderers.
+
+             =item3 Should the ID be very specific (e.g. C<Pod::To::HTML>
+                    vs. C<Pod::To::QuickHTML> are different), or should they be
+                    identified as rendering to the same/similar format?
+
+      =item2 Conjecture: custom types have a method C<.render($ID, &default)>,
+             which the renderer supplies with its identity, and with a sub to
+             run if the custom type can't do anything for the renderer.
+
+             =item3 Could also be C<$type.render($ID) // &default()>, though the
+                    first idea allows the custom type to insist on doing stuff
+                    itself, if it has to for whatever reason.
+
+      =item2 If neither the renderer nor the type itself know how to render
+             appropriately, then the renderer will just use verbatim contexts,
+             with no further processing.
+
+      =item2 What if the renderer and a C<DOC use> both supply the same custom
+             type? Do we defer to the C<use>'d thing? The renderer's? And how?
+             How would the user state preference for the C<DOC use>'d or
+             renderer version?
+
+      =item2 Surely other considerations C<:)>
+
+=item Currently the parser just assumes you're parsing a wholly Pod6 document
+      (like this one, for example). Need to provide differentiation between
+      different usages.
+
+      =item2 Two modes: "DOC mode", which is parsing the whole file as a Pod6
+             document, and "code mode", being asked to parse individual blocks
+             when C<$~MAIN> encounters them.
+
+      =item2 C<TOP> currently sets up some needed dynamics for parsing; keep
+             this, while separating the "DOC mode" stuff out into its own rule
+             along with the "code mode" (single block mode) rule.
+
+=item Support ambient blocks, but I<only for DOC mode>; no sense keeping a
+      second copy of the source code in ambient blocks when running the code.
+
+=item Support C<=encoding>. Somehow. Or otherwise toss it/not make it connected
+      to Pod.
+
+=item Support C<=alias>, at least as far as non-ambient cases (i.e. C<=alias
+      NAME CONTENTS> style).
+
+=head1 Minor Things
+
+=item Ever more tests; the roast's Pod6 coverage is in a similar bad shape to
+      other parts of Pod6 support, so more tests! :)
+
+=item C<=defn> should have a special grammar rule, parsing the first line as a
+      term, and the rest of the block from the second line onward should be
+      parsed with the normal pseudopara stuff.
+
+=item "Fallback" config options like C<head*>, C<item*>, and
+      non-scheme-specializing C<M<>> C<L<>> C<P<>> are not handled as they
+      should, if I recall correctly. Both in getting parsed (at least for
+      C<head*> and C<item*>, spelled exactly like that), and in being used if
+      the specific head/item level or link/module scheme doesn't have
+      configuration associated with it.
+
+=head1 Things that can't be done out of core
+
+=item Support for C<=alias>ing ambient blocks should be possible once we handle
+      ambient blocks in some way, though full support for C<=alias>ing P6 code
+      can't happen until after we move into core.
+
+=item Support for C<$=pod> stuff might be possibly faked via C<$*EQUAL<pod>>
+      until the move to core.
+
+=item Declarator blocks have very little to do with Pod. It should be
+      C<$~MAIN>'s responsibility to actually find and consume these comments,
+      and just ask the Pod language to parse the contents. In other words,
+      declarator blocks should be the Pod version of various Q constructs in
+      terms of handling.
+
+=item C<=encoding> feels like it's not a Pod directive, since it's meant to
+      affect the whole source file. A pragma should be much more appropriate
+      syntax.
+
+=head1 Other Changes to Consider
+
+=item Get special variable C<$=> to hold the C<Pod6::Document> representing the
+      entirety of a file's Pod contents.
+
+=item If we want to use Pod docs in src/core of Rakudo, we'll have to BOOTSTRAP
+      all the various Pod classes.
+
+=item With C<$=> holding a C<Pod6::Document>, you'd get specific blocks through
+      C<$=<pod>>, which would get all C<pod> blocks (in order), naturally. In
+      other words, C<$=pod> would just be a shortcut for C<$=<pod>>.
+
+      =item2 We probably want to do it so that the first time you do C<$=pod>,
+             it'll create the list of C<pod> blocks on the fly, and then cache
+             that for subsequent references. (The C<Pod6::Document> contains a
+             list of blocks in order of appearance, so the hash subscripting
+             would have to pull the appropriate items from that list manually,
+             so AT-KEY and friends won't be stupidly simple)
+
+=end pod
