@@ -336,8 +336,6 @@ class Pod6::Text::FormatCode::P::Doc is Pod6::Text::FormatCode::P {
     method scheme { "doc" }
 }
 
-class Pod6::Config { ... }
-
 #| base class for blocks
 class Pod6::Block is Pod6::Excerpt does Pod6::Children {
     # these are numeric margins; character margins are in the config options

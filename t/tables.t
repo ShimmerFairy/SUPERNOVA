@@ -34,7 +34,7 @@ sub test-cycle(&expect_delim, &expect_para, &expect_abbr, $str, $msg) {
 
 # no borders, no headers, single lines (separation by _multiple_ whitespace)
 
-todo("Style NYI", 3);
+skip("Style NYI", 3);
 #test-cycle(&parse-ok, &parse-ok, &parse-ok,
 #           q:to/END_TBL/, "Single-line headerless whitespace-style table parses");
 #    Smith        John
@@ -45,7 +45,7 @@ todo("Style NYI", 3);
 
 # no borders, whitespace-separated header, single line records
 
-todo("Style NYI", 3);
+skip("Style NYI", 3);
 #test-cycle(&parse-ok, &parse-nok, &parse-nok,
 #           q:to/END_TBL/, "Header row, whitespace-style, single-line table parses");
 #    Last Name    First Name
@@ -56,7 +56,7 @@ todo("Style NYI", 3);
 #END_TBL
 
 # 'ASCII' style, no border
-todo("Style NYI", 3);
+skip("Style NYI", 3);
 #test-cycle(&parse-ok, &parse-ok, &parse-ok,
 #           q:to/END_TBL/, "Borderless ASCII style with header parses");
 #    Last Name | First Name
@@ -69,7 +69,7 @@ todo("Style NYI", 3);
 #END_TBL
 
 # 'ASCII' style, border, header column & header row, single line
-todo("Style NYI", 3);
+skip("Style NYI", 3);
 #test-cycle(&parse-ok, &parse-ok, &parse-ok,
 #           q:to/END_TBL/, "Bordered single-line ASCII with header row & column parses");
 #+---+------------------+

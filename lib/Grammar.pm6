@@ -350,13 +350,13 @@ grammar Pod6::Grammar is Grammar::Parsefail {
             ]
           ]
           <.record_colpos>
-        | <?[╼─┄┈╌╾━┅┉╍═]> # -
+        | <?[╼─┄┈╌╾━┅┉╍═╴╶╸╺]> # -
           [
           | <?{$*ROWSTYLE == $TBL_LIGHT}>
             [
             || [
                | \╼ { $*ROWSTYLE := $TBL_HEAVY }
-               | <[─┄┈╌]>
+               | <[─┄┈╌╴╶]>
                ]
             || <.panic("Expected light border here (any of < ─ ┄ ┈ ╌ ╼ >)")>
             ]
@@ -364,7 +364,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
             [
             || [
                | \╾ { $*ROWSTYLE := $TBL_LIGHT }
-               | <[━┅┉╍]>
+               | <[━┅┉╍╸╺]>
                ]
             || <.panic("Expected heavy border here (any of < ━ ┅ ┉ ╍ ╾ >)")>
             ]
@@ -422,7 +422,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
           $<visual_row>=(
             (
               # make sure it's a content, not separator, line
-              <?before <.start_line> <.ws> <[│┆┊╎╽┃┇┋╏╿║]>> 
+              <?before <.start_line> <.ws> <[│┆┊╎╽┃┇┋╏╿║╵╷╹╻]>> 
 
               # START LINE
               <.start_table_line> <.ws>
@@ -893,7 +893,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
             [
             || [
                | \╼ { $*ROWSTYLE := $TBL_HEAVY }
-               | <[┄┈╌─]>
+               | <[┄┈╌─╴╶]>
                ]
             || <.panic("Expected light row line here")>
             ]
@@ -901,7 +901,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
             [
             || [
                | \╾ { $*ROWSTYLE := $TBL_LIGHT }
-               | <[┉━┅╍]>
+               | <[┉━┅╍╸╺]>
                ]
             || <.panic("Expected heavy row line here")>
             ]
@@ -929,7 +929,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         | <?{@*COLSTYLES[$*ATCOL] == $TBL_LIGHT}>
           [
           || [
-             | <[│┆┊╎]>
+             | <[│┆┊╎╵╷]>
              | \╽ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_HEAVY) }
              ]
           || <.panic("Expected a light column separator, or ╽, here.")>
@@ -937,7 +937,7 @@ grammar Pod6::Grammar is Grammar::Parsefail {
         | <?{@*COLSTYLES[$*ATCOL] == $TBL_HEAVY}>
           [
           || [
-             | <[┃┇┋╏]>
+             | <[┃┇┋╏╹╻]>
              | \╿ { nqp::bindpos(@*COLSTYLES, $*ATCOL, $TBL_LIGHT) }
              ]
           || <.panic("Expected a heavy column separator, or ╿, here.")>
