@@ -18,14 +18,14 @@ class Pod6::Actions {
 
         # we explicitly give all the relevant values, even if !default would cover
         # them -- saves having to decide to lookup in !default
-        "code"    => {  :verbatim,  :keep-space, :!implies-blocks },
+        "code"    => {  :verbatim,  :keep-space, :!implies-blocks, :nested },
         "comment" => { :!verbatim, :!keep-space, :!implies-blocks },
         "defn"    => { :!verbatim, :!keep-space,  :implies-blocks }, # :implies-blocks irrelevant for term line
         "head*"   => { :!verbatim, :!keep-space, :!implies-blocks },
-        "input"   => { :!verbatim,  :keep-space, :!implies-blocks },
-        "item*"   => { :!verbatim, :!keep-space,  :implies-blocks },
+        "input"   => { :!verbatim,  :keep-space, :!implies-blocks, :nested },
+        "item*"   => { :!verbatim, :!keep-space,  :implies-blocks, :nested },
         "nested"  => { :!verbatim, :!keep-space,  :implies-blocks },
-        "output"  => { :!verbatim,  :keep-space, :!implies-blocks },
+        "output"  => { :!verbatim,  :keep-space, :!implies-blocks, :nested },
         "para"    => { :!verbatim, :!keep-space, :!implies-blocks },
         "pod"     => { :!verbatim, :!keep-space,  :implies-blocks },
         "table"   => { :!verbatim, :!keep-space, :!implies-blocks }, # NOTE =table ignores these
