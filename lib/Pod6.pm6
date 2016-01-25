@@ -1,5 +1,7 @@
 # Pod6.pm6 --- various Pod6 classes for holding stuff
 
+no precompilation; # fuck off, we don't want any
+
 #| The base class of Pod6 stuff. Supports only per-block configuration stuff
 #| (general =config statements are separate from this)
 class Pod6::Excerpt does Associative {

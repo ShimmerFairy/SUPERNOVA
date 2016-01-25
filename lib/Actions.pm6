@@ -6,6 +6,8 @@ use Pod6;
 
 use nqp;
 
+no precompilation; # fuck off, we don't want any
+
 # TOCORE every |nqp::hllize(...) should be just |...
 
 class Pod6::Actions {

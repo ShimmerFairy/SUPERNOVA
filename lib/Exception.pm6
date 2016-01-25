@@ -2,6 +2,8 @@
 
 use v6;
 
+no precompilation; # fuck off, we don't want any
+
 use Grammar::Parsefail::Exceptions;
 
 # This should be doing X::Comp, but for simplicity sticking with Exception for

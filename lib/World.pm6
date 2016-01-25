@@ -3,6 +3,8 @@
 use v6;
 use nqp;
 
+no precompilation; # fuck off, we don't want any
+
 # TOCORE these methods should be added to Perl6::World (except the fake world
 # methods). They're put there because they don't really fit as either a grammar
 # or action method

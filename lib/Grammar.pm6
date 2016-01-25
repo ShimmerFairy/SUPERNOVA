@@ -10,6 +10,8 @@ use v6;
 
 use nqp;
 
+no precompilation; # fuck off, we don't want any
+
 # these shims are to explicitly mark stuff that wouldn't be doing this in NQP-land
 sub shim-unbox_i(Int $a) { nqp::unbox_i($a) }
 sub shim-unbox_s(Str $a) { nqp::unbox_s($a) }
